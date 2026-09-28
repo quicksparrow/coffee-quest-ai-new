@@ -46,14 +46,26 @@ Push this folder to a GitHub repository, then import it in Vercel or Netlify. Bo
 ## Project layout
 
 ```
-index.html            HUD, start / pause / end screens
-src/main.js           boot, renderer, lights, screens, game loop
-src/core/             game rules (clock, score, hints, elevator), keyboard input, sound
-src/world/            level layout, doors and turnstiles, graybox building helpers
-src/actors/           the player
-src/systems/          follow camera
-src/ui/               HUD updates
+index.html              HUD, start / pause / end screens
+src/main.js             boot, renderer, lights, screens, game loop
+src/core/game.js        game rules: clock, score, hints, elevator, goal tracker
+src/core/rapier-wasm.js loads the physics engine's WebAssembly as a streamed .wasm file
+src/core/               keyboard input, sound
+src/world/              level layout, doors and turnstiles, graybox building helpers
+src/actors/             the player
+src/systems/            follow camera
+src/ui/                 HUD updates
 ```
+
+## Performance notes
+
+- Physics runs at a fixed 60 steps per second and the player is drawn between steps, so movement is equally smooth on 60, 120 and 144 Hz screens.
+- Static geometry is merged into one mesh per material, which cut the lobby from about 240 draw calls per frame to about 75 (shadows included).
+- Shaders are compiled and textures uploaded before "Press Enter" appears, so there is no hitch when play starts or when X-ray is first used.
+- Render resolution adapts: if the frame rate drops below about 45 fps the game lowers its render scale, and it never climbs back to a scale that was too slow.
+- The HUD only touches the page when a value changes. Menus redraw the 3D scene only when needed, and the game pauses when the tab or window loses focus.
+- Downloads are split so game updates only re-download the small game file: three.js, the physics code and the physics WebAssembly are separate, cacheable files.
+- Add `?debug` to the URL to log boot timings and expose `window.__coffeeQuest` for testing.
 
 ## Status
 

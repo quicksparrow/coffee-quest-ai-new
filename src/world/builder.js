@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const WALL_T = 0.2;      // wall thickness (m)
 export const DOOR_H = 2.5;      // doorway height (m)
@@ -27,6 +28,11 @@ export const PALETTE = {
   elevator: 0x8d97a3,
 };
 
+/**
+ * Builds the graybox. Static boxes and floor zones are not added to the scene one by one:
+ * they are collected per material and merged into a handful of meshes in `finalize()`,
+ * which takes the level from ~250 draw calls to ~25.
+ */
 export class Builder {
   constructor(scene, world, RAPIER) {
     this.scene = scene;
@@ -34,14 +40,22 @@ export class Builder {
     this.R = RAPIER;
     this.geo = new THREE.BoxGeometry(1, 1, 1);
     this.mats = new Map();
-    this.xrayMats = new Set(); // materials that fade in x-ray view
+    this.xrayMats = new Set();   // materials that fade in x-ray view
+    this.batches = new Map();    // key → { material, cast, receive, geometries: [] }
+    this.textures = [];          // label textures, uploaded to the GPU up front
+    this._m = new THREE.Matrix4();
+    this._q = new THREE.Quaternion();
+    this._v = new THREE.Vector3();
+    this._s = new THREE.Vector3();
   }
 
   mat(color, { xray = false, opacity = 1 } = {}) {
     const key = `${color}-${xray}-${opacity}`;
     if (!this.mats.has(key)) {
       const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.02 });
-      if (opacity < 1) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+      // X-ray materials are always in the transparent pass so fading them never forces a
+      // shader recompile (which would cause a visible hitch the first time X is pressed).
+      if (opacity < 1 || xray) { m.transparent = true; m.opacity = opacity; m.depthWrite = opacity >= 1; }
       m.userData.baseOpacity = opacity;
       this.mats.set(key, m);
       if (xray) this.xrayMats.add(m);
@@ -49,18 +63,21 @@ export class Builder {
     return this.mats.get(key);
   }
 
-  // Axis-aligned box from min/max corners. Returns { mesh, collider }.
-  box(x1, y1, z1, x2, y2, z2, { color = PALETTE.wall, collide = true, visible = true, cast = true, receive = true, xray = false, opacity = 1, parent = this.scene } = {}) {
+  _batch(material, geometry, cast, receive) {
+    const key = `${material.uuid}|${cast}|${receive}`;
+    if (!this.batches.has(key)) this.batches.set(key, { material, cast, receive, geometries: [] });
+    this.batches.get(key).geometries.push(geometry);
+  }
+
+  // Axis-aligned box from min/max corners. Returns { collider }.
+  box(x1, y1, z1, x2, y2, z2, { color = PALETTE.wall, collide = true, visible = true, cast = true, receive = true, xray = false, opacity = 1 } = {}) {
     const sx = x2 - x1, sy = y2 - y1, sz = z2 - z1;
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, cz = (z1 + z2) / 2;
-    let mesh = null;
     if (visible) {
-      mesh = new THREE.Mesh(this.geo, this.mat(color, { xray, opacity }));
-      mesh.scale.set(sx, sy, sz);
-      mesh.position.set(cx, cy, cz);
-      mesh.castShadow = cast;
-      mesh.receiveShadow = receive;
-      parent.add(mesh);
+      const g = this.geo.clone();
+      this._m.compose(this._v.set(cx, cy, cz), this._q.identity(), this._s.set(sx, sy, sz));
+      g.applyMatrix4(this._m);
+      this._batch(this.mat(color, { xray, opacity }), g, cast && opacity >= 1, receive);
     }
     let collider = null;
     if (collide) {
@@ -68,7 +85,7 @@ export class Builder {
         this.R.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2).setTranslation(cx, cy, cz),
       );
     }
-    return { mesh, collider };
+    return { collider };
   }
 
   // Wall running along x at a fixed z. gaps: [[xa, xb], ...] become doorways with a lintel above.
@@ -102,12 +119,10 @@ export class Builder {
 
   // Colored floor zone decal (no collider), slightly above the floor.
   zone(x1, z1, x2, z2, y, color) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(x2 - x1, z2 - z1), this.mat(color));
-    m.rotation.x = -Math.PI / 2;
-    m.position.set((x1 + x2) / 2, y + 0.006, (z1 + z2) / 2);
-    m.receiveShadow = true;
-    this.scene.add(m);
-    return m;
+    const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1);
+    g.rotateX(-Math.PI / 2);
+    g.translate((x1 + x2) / 2, y + 0.006, (z1 + z2) / 2);
+    this._batch(this.mat(color), g, false, true);
   }
 
   // Room name painted on the floor, readable from the follow camera.
@@ -129,6 +144,7 @@ export class Builder {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
+    this.textures.push(tex);
     const w = 4.6 * size, hgt = w * (c.height / c.width);
     const m = new THREE.Mesh(
       new THREE.PlaneGeometry(w, hgt),
@@ -138,7 +154,7 @@ export class Builder {
     m.rotation.z = rot;
     m.position.set(x, y + 0.012, z);
     m.renderOrder = 1;
-    this.scene.add(m);
+    this._static(m);
     return m;
   }
 
@@ -154,7 +170,33 @@ export class Builder {
     g.add(body, head);
     g.position.set(x, y, z);
     g.rotation.y = faceYaw;
-    this.scene.add(g);
+    this._static(g);
     return g;
+  }
+
+  // Add an object that never moves: compute its matrices once and skip them every frame.
+  _static(obj) {
+    this.scene.add(obj);
+    obj.updateMatrixWorld(true);
+    obj.traverse((o) => { o.matrixAutoUpdate = false; o.matrixWorldAutoUpdate = false; });
+  }
+
+  // Merge everything collected so far into one mesh per material.
+  finalize() {
+    let meshes = 0;
+    for (const { material, cast, receive, geometries } of this.batches.values()) {
+      const merged = mergeGeometries(geometries, false);
+      geometries.forEach((g) => g.dispose());
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.castShadow = cast;
+      mesh.receiveShadow = receive;
+      // Transparent batches (glass) draw after the solid ones.
+      if (material.transparent && material.opacity < 1) mesh.renderOrder = 2;
+      this._static(mesh);
+      meshes += 1;
+    }
+    this.batches.clear();
+    return meshes;
   }
 }

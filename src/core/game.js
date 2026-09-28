@@ -6,6 +6,8 @@ const GAME_SECONDS_PER_REAL = 480 / ROUND_SECONDS;
 const START_MIN = 8 * 60 + 52;
 
 const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
+const RIDING = new Set(['closing', 'moving', 'arriving']);
+const ACTION_BUFFER = 0.15; // a Space press is remembered briefly, so pressing a hair early still counts
 
 const HINTS = {
   start: "Call's at 9:00 in Meeting 2B, Floor 2. Don't show up without coffee!",
@@ -33,6 +35,8 @@ export class Game {
   constructor({ level, player, camCtl, input, hud, sfx, builder, marker, onFloorChange, onEnd }) {
     Object.assign(this, { level, player, camCtl, input, hud, sfx, builder, marker, onFloorChange, onEnd });
     this.hintsOn = true;
+    this._doorProbe = new THREE.Vector3();
+    this.near = null;
     this.state = level.state;
     this.interactables = this.buildInteractables();
     this.reset();
@@ -47,6 +51,7 @@ export class Game {
     this.elapsed = 0;
     this.smokerT = 12;
     this.busy = null;
+    this.actionBuffer = 0;
     this.sipCooldown = 0;
     this.boost = 0;
     this.spillT = 0;
@@ -73,7 +78,7 @@ export class Game {
     const s = this.state;
     const call = (floor, pt) => ({
       pos: pt, radius: 1.9, floor,
-      enabled: () => !(s.elevator.cabFloor === floor && s.elevator.doorsOpen) && !['closing', 'moving', 'arriving'].includes(s.elevator.phase),
+      enabled: () => !(s.elevator.cabFloor === floor && s.elevator.doorsOpen) && !RIDING.has(s.elevator.phase),
       label: () => (s.elevator.phase === 'coming' && s.elevator.target === floor
         ? { text: `Elevator on its way… ${Math.ceil(s.elevator.timer)} s`, key: null }
         : { text: 'Call elevator' }),
@@ -282,7 +287,7 @@ export class Game {
 
     // Busy actions (waiting in line, etc.) lock movement; moving away cancels them.
     const e = s.elevator;
-    const riding = ['closing', 'moving', 'arriving'].includes(e.phase) && this.level.zones.inCab(p);
+    const riding = RIDING.has(e.phase) && this.level.zones.inCab(p);
     let canMove = !riding;
     if (this.busy) {
       if (input.forward || input.aboutFace) {
@@ -315,9 +320,10 @@ export class Game {
 
     // Space: use the thing in front of you, otherwise sip.
     const near = !this.busy && canMove ? this.nearestInteractable() : null;
-    if (input.action && !this.busy && canMove) {
-      if (near && near.enabled()) near.use();
-      else if (s.coffee.sips > 0) this.sip();
+    this.actionBuffer = input.action ? ACTION_BUFFER : Math.max(0, this.actionBuffer - dt);
+    if (this.actionBuffer > 0 && !this.busy && canMove) {
+      if (near && near.enabled()) { near.use(); this.actionBuffer = 0; }
+      else if (s.coffee.sips > 0 && input.action) { this.sip(); this.actionBuffer = 0; }
     }
 
     // Doors, elevator, smoker cycle
@@ -328,7 +334,8 @@ export class Game {
     s.smokerOpen = cyc > 35.5;
     if (s.smokerOpen && !wasOpen && this.level.zones.stairDoorInside(p)) this.hud.pop("Door's open, go!", 'good');
     const pp = this.player.position;
-    this.level.doors.forEach((d) => d.update(dt, new THREE.Vector3(pp.x, pp.y + 0.85, pp.z)));
+    this._doorProbe.set(pp.x, pp.y + 0.85, pp.z);
+    for (const d of this.level.doors) d.update(dt, this._doorProbe);
 
     // Situational hints
     const Z = this.level.zones;
@@ -360,26 +367,27 @@ export class Game {
     if (xr) this.stats.xray = true;
     this.setXray(xr);
 
-    this.updateHud(near);
+    this.near = near;
   }
 
   setXray(on) {
     if (this.xrayOn === on) return;
     this.xrayOn = on;
+    // Opacity and depth writes only: no shader recompiles, so no hitch.
     this.builder.xrayMats.forEach((m) => {
-      m.transparent = on;
       m.opacity = on ? 0.14 : 1;
       m.depthWrite = !on;
-      m.needsUpdate = true;
     });
     this.marker.material.depthTest = !on;
     this.hud.setXray(on);
   }
 
-  updateHud(near) {
+  // Called once per rendered frame (not per physics step).
+  updateHud(dt) {
+    const near = this.over ? null : this.near;
     const s = this.state;
     const g = this.goal();
-    const p = this.player.position;
+    const p = this.player.renderPos;
     // Arrow relative to the camera's heading so "up" always means "ahead on screen".
     const cy = this.camCtl.yaw;
     const fx = -Math.sin(cy), fz = -Math.cos(cy);
@@ -390,7 +398,7 @@ export class Game {
     this.hud.setGoal(g.title, g.sub, angle, sameFloor ? Math.hypot(dx, dz) : null);
     this.marker.visible = sameFloor;
     this.marker.position.set(g.pt.x, g.pt.y + 2.4 + Math.sin(this.elapsed * 2.5) * 0.15, g.pt.z);
-    this.marker.rotation.y += 0.03;
+    this.marker.rotation.y += dt * 1.8;
 
     // Clock
     const late = this.elapsed > ROUND_SECONDS;
@@ -413,7 +421,7 @@ export class Game {
       this.hud.setPrompt('Go get a coffee first', { key: null });
     } else if (this.hintsOn && this.tut.i < TUTORIAL.length) {
       const step = TUTORIAL[this.tut.i];
-      this.tut.t += this.dt || 0;
+      this.tut.t += dt;
       if (step.done(this) || this.tut.t > (step.maxTime || 9)) { this.tut.i += 1; this.tut.t = 0; }
       this.hud.setPrompt(step.text, { key: step.key, tutorial: true });
     } else if (s.coffee.sips > 0 && this.elapsed < 120 && this.events.every((ev) => ev.label !== 'Sips')) {

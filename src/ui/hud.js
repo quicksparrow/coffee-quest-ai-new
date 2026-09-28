@@ -15,21 +15,30 @@ export class Hud {
 
   show(on) { this.el.hud.hidden = !on; }
 
+  // The HUD is refreshed every frame, but the DOM is only touched when something changed:
+  // writing unchanged text still costs style and layout work on every frame.
   setGoal(title, sub, angle, dist) {
-    if (this.el.goalTitle.textContent !== title) this.el.goalTitle.textContent = title;
     const s = dist != null ? `${sub} · ${Math.round(dist)} m` : sub;
-    if (this.el.goalSub.textContent !== s) this.el.goalSub.textContent = s;
-    this.el.arrow.style.transform = `rotate(${angle}rad)`;
+    if (title !== this._goalTitle) { this.el.goalTitle.textContent = title; this._goalTitle = title; }
+    if (s !== this._goalSub) { this.el.goalSub.textContent = s; this._goalSub = s; }
+    const a = Math.round(angle * 100) / 100;
+    if (a !== this._angle) { this.el.arrow.style.transform = `rotate(${a}rad)`; this._angle = a; }
   }
 
   setClock(text, sub, mode) {
-    this.el.time.textContent = text;
-    this.el.clockSub.textContent = sub;
-    this.el.clock.classList.toggle('warn', mode === 'warn');
-    this.el.clock.classList.toggle('late', mode === 'late');
+    if (text !== this._clockText) { this.el.time.textContent = text; this._clockText = text; }
+    if (sub !== this._clockSub) { this.el.clockSub.textContent = sub; this._clockSub = sub; }
+    if (mode !== this._clockMode) {
+      this.el.clock.classList.toggle('warn', mode === 'warn');
+      this.el.clock.classList.toggle('late', mode === 'late');
+      this._clockMode = mode;
+    }
   }
 
   setItems({ floor, badge, coffee, sips }) {
+    const sig = `${floor}|${badge}|${coffee}|${sips}`;
+    if (sig === this._items) return;
+    this._items = sig;
     this.el.floor.textContent = floor;
     this.el.badge.hidden = !badge;
     this.el.coffee.hidden = !coffee;
@@ -38,9 +47,12 @@ export class Hud {
 
   // key: 'Space' etc. or null; progress: 0..1 or null
   setPrompt(text, { key = 'Space', progress = null, tutorial = false } = {}) {
-    if (!text) { this.el.prompt.hidden = true; this.lastPrompt = ''; return; }
-    this.el.prompt.hidden = false;
-    this.el.prompt.classList.toggle('tutorial', tutorial);
+    if (!text) {
+      if (this.lastPrompt !== '') { this.el.prompt.hidden = true; this.lastPrompt = ''; }
+      return;
+    }
+    if (this.lastPrompt === '') this.el.prompt.hidden = false;
+    if (tutorial !== this._tut) { this.el.prompt.classList.toggle('tutorial', tutorial); this._tut = tutorial; }
     const sig = `${key}|${text}`;
     if (sig !== this.lastPrompt) {
       this.el.promptKeys.hidden = !key;
@@ -49,8 +61,12 @@ export class Hud {
       this.el.promptText.textContent = text;
       this.lastPrompt = sig;
     }
-    this.el.bar.hidden = progress == null;
-    if (progress != null) this.el.fill.style.width = `${Math.round(progress * 100)}%`;
+    const hasBar = progress != null;
+    if (hasBar !== this._bar) { this.el.bar.hidden = !hasBar; this._bar = hasBar; }
+    if (hasBar) {
+      const w = Math.round(progress * 100);
+      if (w !== this._fill) { this.el.fill.style.transform = `scaleX(${w / 100})`; this._fill = w; }
+    }
   }
 
   text(from, message) {
@@ -65,7 +81,11 @@ export class Hud {
     setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 450); }, life);
   }
 
-  clearTexts() { this.el.toasts.innerHTML = ''; this.el.popups.innerHTML = ''; }
+  clearTexts() {
+    this.el.toasts.innerHTML = '';
+    this.el.popups.innerHTML = '';
+    this._goalTitle = this._goalSub = this._angle = this._clockText = this._clockSub = this._clockMode = this._items = undefined;
+  }
 
   pop(text, kind = '') {
     const p = document.createElement('div');
@@ -76,5 +96,5 @@ export class Hud {
   }
 
   setXray(on) { this.el.xray.hidden = !on; }
-  fade(on) { this.el.fade.classList.toggle('on', on); }
+  fade(on) { if (on !== this._fade) { this.el.fade.classList.toggle('on', on); this._fade = on; } }
 }
