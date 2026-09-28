@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { PALETTE as C } from './builder.js';
 import { Door } from './doors.js';
+import { Elevator } from './elevator.js';
 
 /*
   Level 1 — "Badge? What Badge?"  Footprint 32 m (x) × 24 m (z). North is -z.
   Ground floor top at y=0, Floor 2 top at y=4 (slab 3.7–4.0).
 
-  GROUND                                    FLOOR 2
-  z0 ┌────────┬──────┬──────┬──────┐        ┌────────┬──────┬──────┬──────┬──────┐
-     │ secure │ elev │      │stairs│service │directors│ elev │ WC   │stairs│closet│
-  z9 │  zone  │ lobby│      ├─door─┤corridor├────────┴lobby─┴──────┴─door─┼─door─┤
-  z11├═══════turnstiles═════════════┤       │        open office          │kitchen│
-     │ reception          lobby     ├─────  │  pods  pods  pods            │  back │
-     │                   café       │mail   │                        ├─badge┴─door─┤
-  z24└───────────entrance───────────┴room   │ phone pods  printer    │ Meeting 2B  │
+  GROUND                                      FLOOR 2
+  z0 ┌──────┬────┬─────┬──────┬───────┐      ┌───────┬────┬─────┬──────┬───────┐
+     │      │car │     │stairs│service│      │direct.│car │ WC  │stairs│closet │
+  z9 │secure├lby─┤     ├─door─┤corridor      ├───────┴lby─┴─────┴door──┼─door──┤
+  z11├══════turnstiles══════════┤       │      │   pods  pods  pods  pods │kitchen│
+     │ reception       lobby    ├────── │      ├────────┐   pods  pods   ├───────┤
+     │                 café     │mail   │      │Meeting │   pods  pods   lounge  │
+  z24└──────────entrance────────┴room   │      │  2B  door  printer  phone pods   │
 */
 
 export const F2 = 4;
@@ -21,21 +22,24 @@ export const F2 = 4;
 export function buildLevel(b, state) {
   const R = b.R;
   const doors = [];
+  const onF2 = (p) => p.y > 2;
 
   // ---------- Slabs ----------
   b.box(-0.5, -0.3, -0.5, 32.5, 0, 24.5, { color: C.lobby, cast: false });
-  // Floor 2 slab, leaving the stair opening (x20–23, z1–8) open.
+  // Floor 2 slab, leaving the elevator shaft (x10–14, z0–4) and the stair opening (x20–23, z0–8) open.
   const slab = { color: 0xe9ecef, cast: false };
-  b.box(0, 3.7, 0, 20, 4, 24, slab);
-  b.box(20, 3.7, 0, 23, 4, 1, slab);
+  b.box(0, 3.7, 0, 10, 4, 24, slab);
+  b.box(10, 3.7, 4, 14, 4, 24, slab);
+  b.box(14, 3.7, 0, 20, 4, 24, slab);
   b.box(20, 3.7, 8, 23, 4, 24, slab);
   b.box(23, 3.7, 0, 32, 4, 24, slab);
 
-  // ---------- Floor zones + labels (ground) ----------
-  b.zone(0, 0, 20, 11, 0, C.secure);
+  // ---------- Floor zones + labels (ground). Zones never overlap, so nothing flickers. ----------
+  b.zone(0, 0, 10, 11, 0, C.secure);
+  b.zone(10, 4, 14, 11, 0, C.secure);
+  b.zone(14, 0, 20, 11, 0, C.secure);
   b.zone(20, 9, 26, 11, 0, C.secure);
   b.zone(20, 0, 26, 9, 0, C.stair);
-  b.zone(10, 0, 14, 4, 0, C.elevator);
   b.zone(17, 17.2, 25, 24, 0, C.cafe);
   b.zone(26, 14, 32, 24, 0, C.mail);
   b.zone(26, 0, 32, 14, 0, C.service);
@@ -43,28 +47,29 @@ export function buildLevel(b, state) {
   b.label('Reception', 3.5, 0, 17.4, { size: 0.62, sub: 'visitor passes' });
   b.label('Lobby café', 21, 0, 17.9, { size: 0.62 });
   b.label('Turnstiles', 12, 0, 12.6, { size: 0.6, sub: 'badge only' });
-  b.label('Elevators', 12, 0, 6.6, { size: 0.62 });
-  b.label('Stairs', 24.6, 0, 6.2, { size: 0.45, rot: Math.PI / 2 });
+  b.label('Elevator', 12, 0, 6.6, { size: 0.62 });
+  b.label('Stairs', 24.6, 0, 5, { size: 0.45, rot: Math.PI / 2 });
   b.label('Mailroom', 29, 0, 18.6, { size: 0.6, sub: 'staff only' });
   b.label('Service corridor', 29, 0, 7.5, { size: 0.62, rot: Math.PI / 2 });
   b.label('Entrance', 15, 0, 23.1, { size: 0.45 });
 
   // ---------- Floor zones + labels (floor 2) ----------
-  b.zone(0, 9, 26, 24, F2, C.office);
+  b.zone(0, 9, 26, 16.5, F2, C.office);
+  b.zone(9, 16.5, 26, 24, F2, C.office);
+  b.zone(26, 16.5, 32, 24, F2, C.kitchen);
+  b.zone(0, 16.5, 9, 24, F2, C.meeting);
   b.zone(26, 9, 32, 16.5, F2, C.kitchen);
-  b.zone(24, 16.5, 32, 24, F2, C.meeting);
   b.zone(26, 0, 32, 9, F2, C.closet);
-  b.zone(20, 0, 26, 9, F2, C.stair);
-  b.zone(10, 0, 14, 9, F2, C.elevator);
-  b.zone(0, 20, 6, 24, F2, C.pods);
-  b.label('Open office', 10.5, F2, 14.55, { size: 0.9 });
+  b.zone(20, 8, 26, 9, F2, C.stair);
+  b.zone(23, 0, 26, 8, F2, C.stair);
+  b.zone(10, 4, 14, 9, F2, C.elevator);
+  b.label('Open office', 5.5, F2, 14.8, { size: 0.85 });
   b.label('Kitchen', 29, F2, 15.3, { size: 0.55 });
-  b.label('Meeting 2B', 28.3, F2, 23, { size: 0.65, sub: '09:00 call' });
+  b.label('Lounge', 29, F2, 20.5, { size: 0.55 });
+  b.label('Meeting 2B', 4.5, F2, 23.1, { size: 0.65, sub: '09:00 call' });
   b.label('Supply closet', 29, F2, 5, { size: 0.55 });
-  b.label('Stairs', 24.6, F2, 5, { size: 0.45, rot: Math.PI / 2 });
-  b.label('Elevators', 12, F2, 6.6, { size: 0.62 });
-  b.label('Phone pods', 3, F2, 19.4, { size: 0.5 });
-  b.label('Printer', 9.7, F2, 21.9, { size: 0.42 });
+  b.label('Elevator', 12, F2, 6.6, { size: 0.62 });
+  b.label('Printer', 10.8, F2, 22.3, { size: 0.42 });
 
   // ---------- Exterior walls (both floors, one piece) ----------
   b.hwall(0, 0, 32, 0, 7);
@@ -72,36 +77,47 @@ export function buildLevel(b, state) {
   b.vwall(0, 0, 24, 0, 7);
   b.vwall(32, 0, 24, 0, 7);
 
+  // ---------- Elevator shaft (full height) + car ----------
+  b.vwall(10, 0, 4, 0, 7);
+  b.vwall(14, 0, 4, 0, 7);
+  b.hwall(4, 10, 14, 0, 3.7, [[11, 13]]);
+  b.hwall(4, 10, 14, F2, 3, [[11, 13]]);
+  const elevator = new Elevator(b, R, { floors: [0, F2] });
+  const landingDoors = [0, F2].map((y0, floor) => {
+    const d = new Door(b, {
+      axis: 'x', a: 11, b: 13, fixed: 4.12, y0, h: 2.45, color: 0x9aa4b0, speed: 1.8,
+      shouldOpen: () => elevator.floor === floor && elevator.doorsOpen && elevator.phase === 'idle',
+    });
+    doors.push(d);
+    return d;
+  });
+
   // ---------- Stairwell (full height) ----------
+  // One straight flight: bottom at the north end (z=1, ground) rising south to the Floor 2
+  // landing (z=8–9), which ends right at the stair exit door.
   b.vwall(20, 0, 9, 0, 7);
-  b.vwall(26, 0, 9, 0, 7, [[3, 4.6]]);          // ground: east door to service corridor
-  b.hwall(9, 20, 26, 0, 3.7, [[20.4, 23]]);      // ground: front door, no badge needed
-  // Ramp collider: bottom (z=8, y=0) up to top (z=1, y=4).
+  b.vwall(26, 0, 9, 0, 7, [[3, 4.6]]);          // ground: east door from the service corridor
+  b.hwall(9, 20, 26, 0, 3.7, [[23.4, 25.6]]);    // ground: front door from the lobby (no badge)
+  b.vwall(23, 1.6, 9, 0, 3.7);                   // ground: side wall between walkway and stairs
   const run = 7, rise = 4, len = Math.hypot(run, rise), th = Math.atan2(rise, run);
-  const normal = new THREE.Vector3(0, Math.cos(th), Math.sin(th));
-  const mid = new THREE.Vector3(21.5, rise / 2, 4.5).addScaledVector(normal, -0.1);
+  const normal = new THREE.Vector3(0, Math.cos(th), -Math.sin(th));
+  const mid = new THREE.Vector3(21.5, rise / 2, 1 + run / 2).addScaledVector(normal, -0.1);
   b.world.createCollider(
-    R.ColliderDesc.cuboid(1.5, 0.1, len / 2)
+    R.ColliderDesc.cuboid(1.5, 0.1, len / 2 + 0.05)
       .setTranslation(mid.x, mid.y, mid.z)
-      .setRotation({ x: Math.sin(th / 2), y: 0, z: 0, w: Math.cos(th / 2) }),
+      .setRotation({ x: Math.sin(-th / 2), y: 0, z: 0, w: Math.cos(-th / 2) }),
   );
   const steps = 14;
   for (let i = 0; i < steps; i++) {
-    const zs = 8 - i * (run / steps), zb = zs - run / steps;
-    b.box(20.05, 0, zb, 22.95, (i + 0.6) * (rise / steps), zs, { color: C.stairs, collide: false });
+    const z0 = 1 + i * (run / steps);
+    b.box(20.05, 0, z0, 22.95, (i + 0.7) * (rise / steps), z0 + run / steps, { color: C.stairs, collide: false });
   }
-  // Railings on floor 2 around the opening.
-  b.box(22.9, F2, 1, 23.1, F2 + 1.05, 8, { color: C.rail });
-  b.box(20, F2, 7.9, 23, F2 + 1.05, 8.1, { color: C.rail });
+  b.box(22.9, F2, 0, 23.1, F2 + 1.05, 8, { color: C.rail });   // railing along the stair opening
 
   // ---------- Ground floor interior ----------
   const G = 3.7;
   b.vwall(26, 9, 24, 0, G, [[20.5, 22.2]]);     // lobby | service + mailroom (propped door)
   b.hwall(14, 26, 32, 0, G, [[28, 30]]);         // mailroom → service corridor
-  // Elevator shaft
-  b.vwall(10, 0, 4, 0, G);
-  b.vwall(14, 0, 4, 0, G);
-  b.hwall(4, 10, 14, 0, G, [[11, 13]]);
   // Turnstile line: glass barriers + pillars + 4 gates
   const glass = { color: C.glass, opacity: 0.45, xray: false, cast: false };
   b.box(0, 0, 10.95, 8, 1.2, 11.05, glass);
@@ -136,60 +152,56 @@ export function buildLevel(b, state) {
 
   // ---------- Floor 2 interior ----------
   const H = 3;
-  b.vwall(10, 0, 4, F2, H);
-  b.vwall(14, 0, 4, F2, H);
-  b.hwall(4, 10, 14, F2, H, [[11, 13]]);
   b.hwall(9, 0, 10, F2, H);                       // directors' offices (closed)
   b.vwall(10, 4, 9, F2, H);
   b.vwall(14, 4, 9, F2, H);                       // restrooms (closed)
   b.hwall(9, 14, 20, F2, H);
-  b.hwall(9, 20, 26, F2, H, [[23.6, 25.4]]);      // stair exit (badge)
+  b.hwall(9, 20, 26, F2, H, [[20.6, 22.4]]);      // stair exit (badge), straight ahead off the stairs
   b.hwall(9, 26, 32, F2, H, [[28.5, 30]]);        // supply closet
   b.vwall(26, 9, 16.5, F2, H, [[11.5, 13.5]]);    // kitchen entrance
-  b.hwall(16.5, 24, 32, F2, H, [[28, 29.6]]);     // kitchen back door into 2B
-  b.vwall(24, 16.5, 24, F2, H, [[20, 22]]);       // Meeting 2B badge door
-  // Cubicle pods
-  [1.5, 7.5, 13.5].forEach((x) => [11, 15.5].forEach((z) => {
-    b.box(x, F2, z, x + 4.3, F2 + 1.25, z + 2.6, { color: C.partition });
-    b.box(x + 0.2, F2 + 1.25, z + 0.2, x + 4.1, F2 + 1.28, z + 2.4, { color: C.desk, collide: false });
-  }));
+  b.hwall(16.5, 26, 32, F2, H);                   // kitchen | lounge
+  // Meeting 2B: far corner of the floor, so you have to cross the whole open office.
+  b.hwall(16.5, 0, 9, F2, H);
+  b.vwall(9, 16.5, 24, F2, H, [[20, 22]]);
+  // Cubicle pods: rows between the arrivals (north) and Meeting 2B (south-west).
+  const pods = [[1.5, 11], [7, 11], [12.5, 11], [18, 11], [12.5, 15], [18, 15], [12.5, 19.5], [18, 19.5]];
+  pods.forEach(([x, z]) => {
+    b.box(x, F2, z, x + 4.3, F2 + 1.25, z + 2.2, { color: C.partition });
+    b.box(x + 0.2, F2 + 1.25, z + 0.2, x + 4.1, F2 + 1.28, z + 2.0, { color: C.desk, collide: false });
+  });
   // Kitchen
   b.box(31.2, F2, 9.6, 32, F2 + 0.95, 16.2, { color: C.counter });
   b.box(31.25, F2 + 0.95, 12.2, 31.9, F2 + 1.55, 13.2, { color: 0x3b3f45 });   // espresso machine
   b.box(27.8, F2, 10.4, 29.2, F2 + 0.95, 12.8, { color: C.counter });          // island
   b.box(26.3, F2, 14.8, 27.3, F2 + 2, 16.2, { color: 0xe9edf1 });              // fridge
-  // Meeting 2B
-  b.box(26, F2, 19, 30.5, F2 + 0.75, 21.6, { color: C.counter });
-  b.box(31.8, F2 + 1, 18.5, 31.95, F2 + 2.2, 22, { color: 0x2b2f35, collide: false });
-  // Phone pods, printer, closet shelves
-  b.box(0.3, F2, 21, 2.4, F2 + 2.3, 23.6, { color: C.glass, opacity: 0.5, xray: false });
-  b.box(2.8, F2, 21, 4.9, F2 + 2.3, 23.6, { color: C.glass, opacity: 0.5, xray: false });
-  b.box(9, F2, 22.8, 10.4, F2 + 1.1, 23.8, { color: 0xd8dce2 });
+  // Meeting 2B furniture
+  b.box(2, F2, 18.6, 6.5, F2 + 0.75, 21.6, { color: C.counter });
+  b.box(0.1, F2 + 1, 18.5, 0.25, F2 + 2.2, 22, { color: 0x2b2f35, collide: false });
+  // Lounge, phone pods, printer, closet shelves
+  b.box(28.5, F2, 21.8, 31.6, F2 + 0.7, 23.2, { color: 0x6f7f95 });
+  b.box(23.4, F2, 17.5, 25.4, F2 + 2.3, 19.7, { color: C.glass, opacity: 0.5, xray: false });
+  b.box(23.4, F2, 20.6, 25.4, F2 + 2.3, 22.8, { color: C.glass, opacity: 0.5, xray: false });
+  b.box(10.1, F2, 23, 11.5, F2 + 1.1, 23.8, { color: 0xd8dce2 });
   b.box(26.4, F2, 0.4, 31.6, F2 + 2, 1.2, { color: C.desk });
 
   // ---------- Doors ----------
-  const onF2 = (p) => p.y > 2;
-  const elevatorDoors = [0, F2].map((y0, floor) => {
-    const d = new Door(b, {
-      axis: 'x', a: 11, b: 13, fixed: 4, y0, h: 2.4, color: 0x9aa4b0, speed: 2,
-      shouldOpen: () => state.elevator.cabFloor === floor && state.elevator.doorsOpen,
-    });
-    doors.push(d);
-    return d;
-  });
+  // Stair exit: badge only from the stairwell side. Someone steps out every 25 s.
   const stairDoor = new Door(b, {
-    axis: 'x', a: 23.6, b: 25.4, fixed: 9, y0: F2, h: 2.4, color: 0x8a6f6f,
-    shouldOpen: (p) => onF2(p) && ((p.z > 9 && Math.hypot(p.x - 24.5, p.z - 9) < 1.7) || state.smokerOpen),
+    axis: 'x', a: 20.6, b: 22.4, fixed: 9, y0: F2, h: 2.4, color: 0x8a6f6f,
+    shouldOpen: (p) => onF2(p) && ((p.z > 9 && Math.hypot(p.x - 21.5, p.z - 9) < 1.7) || state.smokerOpen),
   });
   doors.push(stairDoor);
+  // Meeting 2B: opens as you walk up.
   const meetingDoor = new Door(b, {
-    axis: 'z', a: 20, b: 22, fixed: 24, y0: F2, h: 2.4, color: 0x8a6f6f,
-    shouldOpen: (p) => onF2(p) && p.x > 24 && Math.hypot(p.x - 24, p.z - 21) < 1.7,
+    axis: 'z', a: 20, b: 22, fixed: 9, y0: F2, h: 2.4, color: 0x6b8fb3,
+    shouldOpen: (p) => onF2(p) && Math.hypot(p.x - 9, p.z - 21) < 2,
   });
   doors.push(meetingDoor);
 
   return {
     doors,
+    elevator,
+    landingDoors,
     stairDoor,
     spawn: new THREE.Vector3(15, 0, 22.2),
     spawnYaw: 0,
@@ -202,21 +214,23 @@ export function buildLevel(b, state) {
       turnstiles: new THREE.Vector3(12, 0, 11),
       elevatorLobby: new THREE.Vector3(12, 0, 5.5),
       eastDoor: new THREE.Vector3(26.6, 0, 3.8),
-      rampTop: new THREE.Vector3(21.5, F2, 0.5),
-      stairExit: new THREE.Vector3(24.5, F2, 9.6),
-      kitchenDoor: new THREE.Vector3(26, F2, 12.5),
-      meeting: new THREE.Vector3(28, F2, 20.3),
+      stairsFront: new THREE.Vector3(24.5, 0, 9.6),
+      rampBottom: new THREE.Vector3(21.5, 0, 0.5),
+      rampTop: new THREE.Vector3(21.5, F2, 8.5),
+      stairExit: new THREE.Vector3(21.5, F2, 9.8),
+      meetingDoor: new THREE.Vector3(10.4, F2, 21),
+      meeting: new THREE.Vector3(4.5, F2, 20),
     },
     zones: {
-      inCab: (p) => p.x > 10.2 && p.x < 13.8 && p.z > 0.2 && p.z < 3.9,
+      inCab: (p) => elevator.contains(p),
       secure: (p) => !onF2(p) && p.z < 11 && p.x < 20,
       stairwell: (p) => p.x > 20 && p.x < 26 && p.z < 9,
+      stairWalkway: (p) => !onF2(p) && p.x > 23 && p.x < 26 && p.z < 9,
       service: (p) => !onF2(p) && p.x > 26,
       kitchen: (p) => onF2(p) && p.x > 26 && p.z > 9 && p.z < 16.5,
-      meeting: (p) => onF2(p) && p.x > 24.3 && p.z > 16.8,
+      meeting: (p) => onF2(p) && p.x < 8.8 && p.z > 16.7,
       turnstileFront: (p) => !onF2(p) && p.z > 11 && p.z < 13.4 && p.x > 7 && p.x < 17,
-      stairDoorInside: (p) => onF2(p) && p.x > 23.1 && p.x < 26 && p.z > 6.8 && p.z < 9,
-      meetingDoorOutside: (p) => onF2(p) && p.x < 24 && p.x > 21.8 && p.z > 19 && p.z < 23,
+      stairDoorInside: (p) => onF2(p) && p.x > 20 && p.x < 23.4 && p.z > 7.4 && p.z < 9,
     },
   };
 }

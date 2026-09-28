@@ -121,8 +121,18 @@ export class Builder {
   zone(x1, z1, x2, z2, y, color) {
     const g = new THREE.PlaneGeometry(x2 - x1, z2 - z1);
     g.rotateX(-Math.PI / 2);
-    g.translate((x1 + x2) / 2, y + 0.006, (z1 + z2) / 2);
-    this._batch(this.mat(color), g, false, true);
+    g.translate((x1 + x2) / 2, y + 0.01, (z1 + z2) / 2);
+    this._batch(this.zoneMat(color), g, false, true);
+  }
+
+  // Floor decals get a depth offset so they always win against the floor they sit on.
+  zoneMat(color) {
+    const key = `zone-${color}`;
+    if (!this.mats.has(key)) {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      this.mats.set(key, m);
+    }
+    return this.mats.get(key);
   }
 
   // Room name painted on the floor, readable from the follow camera.

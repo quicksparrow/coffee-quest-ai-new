@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { F2 } from '../world/level1.js';
 
 export const ROUND_SECONDS = 360;          // 08:52 → 09:00 in real seconds (6 minutes)
 const GAME_SECONDS_PER_REAL = 480 / ROUND_SECONDS;
 const START_MIN = 8 * 60 + 52;
 
 const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
-const RIDING = new Set(['closing', 'moving', 'arriving']);
+const SMOKE_EVERY = 25;     // the stair exit opens this often (seconds)…
+const SMOKE_OPEN = 6;       // …and stays open this long
 const ACTION_BUFFER = 0.15; // a Space press is remembered briefly, so pressing a hair early still counts
 
 const HINTS = {
@@ -15,8 +15,9 @@ const HINTS = {
   visitor: 'Visitor pass works on the turnstiles and the elevators. Not on the doors upstairs, though.',
   coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost.',
   spill: 'Careful! Hurrying spills your coffee.',
-  stairdoor: 'That door needs a badge. People step out for a smoke every so often. Wait by the door and slip in after them.',
-  meetingdoor: "2B's door is badge only. The kitchen has a back door straight into 2B.",
+  stairdoor: 'That door needs a badge. Someone steps out for a smoke every half minute or so. Wait right by it and walk in after them.',
+  elevator: 'Just step in and wait, it goes on its own. Or press Space to leave right away.',
+  floor2: "You're up! 2B is in the far corner, right across the open office.",
   nocoffee: "You can't walk in empty-handed. Coffee first!",
   xray: 'Pro tip: hold X to see through the walls.',
   warn: 'Two minutes! Where are you?',
@@ -46,10 +47,9 @@ export class Game {
     const s = this.state;
     s.hasBadge = false;
     s.smokerOpen = false;
-    s.elevator = { cabFloor: 0, doorsOpen: false, phase: 'idle', timer: 0, target: 0, idle: 0 };
     s.coffee = { obtained: false, latte: false, espresso: false, sips: 0, count: 0 };
     this.elapsed = 0;
-    this.smokerT = 12;
+    this.smokerT = 0;
     this.busy = null;
     this.actionBuffer = 0;
     this.sipCooldown = 0;
@@ -58,17 +58,16 @@ export class Game {
     this.seenHints = new Set();
     this.events = [];
     this.conversations = 0;
-    this.cameFromKitchen = false;
     this.inMeetingNoCoffee = false;
     this.tut = { i: 0, t: 0 };
     this.stats = { moved: false, turned: false, aboutFaced: false, hurried: false, crouched: false, xray: false };
     this.over = false;
     this.lastFloor = 0;
     this.player.crouching = false;
+    this.level.elevator.reset();
     this.player.teleport(this.level.spawn, this.level.spawnYaw);
     this.camCtl.snap();
     this.hud.clearTexts();
-    this.hud.fade(false);
     this.onFloorChange(0);
   }
 
@@ -76,13 +75,17 @@ export class Game {
   buildInteractables() {
     const P = this.level.points;
     const s = this.state;
+    const el = this.level.elevator;
+    const here = (floor) => el.phase === 'idle' && el.floor === floor && el.doorsOpen;
     const call = (floor, pt) => ({
-      pos: pt, radius: 1.9, floor,
-      enabled: () => !(s.elevator.cabFloor === floor && s.elevator.doorsOpen) && !RIDING.has(s.elevator.phase),
-      label: () => (s.elevator.phase === 'coming' && s.elevator.target === floor
-        ? { text: `Elevator on its way… ${Math.ceil(s.elevator.timer)} s`, key: null }
-        : { text: 'Call elevator' }),
-      use: () => this.callElevator(floor),
+      pos: pt, radius: 1.9, floor, always: true,     // always shows its status, even when it can't be used
+      enabled: () => el.phase === 'idle' && !here(floor),
+      label: () => {
+        if (here(floor)) return { text: 'Elevator is here · step in', key: null };
+        if (el.busy) return { text: el.target === floor ? 'Elevator on its way…' : 'Elevator is busy…', key: null };
+        return { text: 'Call elevator' };
+      },
+      use: () => { el.call(floor); this.sfx.beep(); },
     });
     return [
       {
@@ -111,10 +114,14 @@ export class Game {
       call(0, P.callG),
       call(1, P.callF2),
       {
-        zone: (p) => this.level.zones.inCab(p) && this.player.floor === s.elevator.cabFloor,
-        enabled: () => s.elevator.phase === 'idle',
-        label: () => ({ text: s.elevator.cabFloor === 0 ? 'Ride up to Floor 2' : 'Ride down to the Lobby' }),
-        use: () => this.ride(),
+        zone: (p) => el.contains(p) && el.phase === 'idle' && el.doorsOpen,
+        enabled: () => true,
+        label: () => {
+          const dest = el.floor === 0 ? 'Floor 2' : 'the Lobby';
+          const t = el.departIn;
+          return { text: t != null ? `Go to ${dest} now · leaving in ${Math.ceil(t)} s` : `Go to ${dest}` };
+        },
+        use: () => el.go(el.floor === 0 ? 1 : 0),
       },
     ];
   }
@@ -131,8 +138,7 @@ export class Game {
       if (it.floor !== f) continue;
       const d = Math.hypot(p.x - it.pos.x, p.z - it.pos.z);
       if (d < it.radius && d < bestD) {
-        // Show the "on its way" status even while the call is disabled-for-use.
-        if (it.enabled() || this.state.elevator.phase === 'coming') { best = it; bestD = d; }
+        if (it.enabled() || it.always) { best = it; bestD = d; }
       }
     }
     return best;
@@ -178,62 +184,6 @@ export class Game {
     this.sfx.buzz();
   }
 
-  // ---------- Elevator ----------
-  callElevator(floor) {
-    const e = this.state.elevator;
-    if (e.cabFloor === floor) {
-      e.phase = 'opening'; e.timer = 0.6; e.target = floor;
-    } else {
-      e.phase = 'coming'; e.timer = 5 + Math.random() * 7; e.target = floor;
-    }
-    this.sfx.beep();
-  }
-
-  ride() {
-    const e = this.state.elevator;
-    e.doorsOpen = false;
-    e.phase = 'closing';
-    e.timer = 1.1;
-  }
-
-  updateElevator(dt) {
-    const e = this.state.elevator;
-    const p = this.player.position;
-    e.timer -= dt;
-    switch (e.phase) {
-      case 'coming':
-      case 'opening':
-        if (e.timer <= 0) {
-          e.cabFloor = e.target; e.doorsOpen = true; e.phase = 'idle'; e.idle = 8; this.sfx.ding();
-        }
-        break;
-      case 'closing':
-        if (e.timer <= 0) { e.phase = 'moving'; e.timer = 1.5; this.hud.fade(true); }
-        break;
-      case 'moving':
-        if (e.timer <= 0.4 && !e.moved) {
-          const up = e.cabFloor === 0;
-          const dest = new THREE.Vector3(p.x, up ? F2 : 0, p.z);
-          this.player.teleport(dest, this.player.yaw);
-          e.cabFloor = up ? 1 : 0;
-          e.moved = true;
-          this.camCtl.snap();
-        }
-        if (e.timer <= 0) { e.phase = 'arriving'; e.timer = 0.5; e.moved = false; this.hud.fade(false); }
-        break;
-      case 'arriving':
-        if (e.timer <= 0) { e.doorsOpen = true; e.phase = 'idle'; e.idle = 8; this.sfx.ding(); }
-        break;
-      default:
-        if (e.doorsOpen) {
-          const nearDoor = Math.abs(p.x - 12) < 1.6 && Math.abs(p.z - 4) < 1.2;
-          const inside = this.level.zones.inCab(p) && this.player.floor === e.cabFloor;
-          if (!inside && !nearDoor) e.idle -= dt;
-          if (e.idle <= 0) e.doorsOpen = false;
-        }
-    }
-  }
-
   // ---------- Goal tracker ----------
   goal() {
     const P = this.level.points;
@@ -247,18 +197,23 @@ export class Game {
         : { title: 'Get a coffee', sub: 'Kitchen espresso', pt: P.espresso };
     }
     const title = 'Go to Meeting 2B';
+    const el = this.level.elevator;
+    if (Z.inCab(p)) {
+      if (el.moving) return { title, sub: el.target === 1 ? 'Going up…' : 'Going down…', pt: P.meeting };
+      if (f === 0) return { title, sub: 'Wait, or press Space to go up', pt: P.meeting };
+    }
     if (f === 0) {
+      if (Z.stairWalkway(p)) return { title, sub: 'The stairs start at the far end', pt: P.rampBottom };
       if (Z.stairwell(p)) return { title, sub: 'Up the stairs', pt: P.rampTop };
       if (Z.service(p)) return { title, sub: 'Service corridor to the stairs', pt: P.eastDoor };
-      if (Z.inCab(p) && s.elevator.phase === 'idle') return { title, sub: 'Press Space to ride up', pt: P.meeting };
-      if (Z.secure(p) || (p.z < 11 && p.x < 26)) return { title, sub: 'Elevators to Floor 2', pt: P.elevatorLobby };
+      if (Z.secure(p) || (p.z < 11 && p.x < 26)) return { title, sub: 'Elevator to Floor 2', pt: P.elevatorLobby };
       return s.hasBadge
         ? { title, sub: 'Through the turnstiles', pt: P.turnstiles }
         : { title, sub: 'You need a way past the turnstiles', pt: P.reception };
     }
-    if (Z.stairwell(p)) return { title, sub: 'Stair exit', pt: P.stairExit };
-    if (Z.kitchen(p) || Z.meeting(p)) return { title, sub: 'Floor 2', pt: P.meeting };
-    return { title, sub: 'Via the kitchen', pt: P.kitchenDoor };
+    if (Z.stairwell(p)) return { title, sub: 'Stair exit, straight ahead', pt: P.stairExit };
+    if (Z.meeting(p) || p.x < 9) return { title, sub: 'Floor 2', pt: P.meeting };
+    return { title, sub: 'Far corner, across the office', pt: P.meetingDoor };
   }
 
   // ---------- Clock ----------
@@ -286,9 +241,13 @@ export class Game {
     if (input.crouch) this.stats.crouched = true;
 
     // Busy actions (waiting in line, etc.) lock movement; moving away cancels them.
-    const e = s.elevator;
-    const riding = RIDING.has(e.phase) && this.level.zones.inCab(p);
-    let canMove = !riding;
+    // Elevator car moves first; a rider is carried with it (no teleports, no black screen).
+    const el = this.level.elevator;
+    const ev = el.update(dt, p, this.level.landingDoors);
+    if (ev.arrived) { this.sfx.ding(); if (ev.inside && el.floor === 1) this.hint('floor2'); }
+    if (ev.inside && el.phase === 'idle' && el.doorsOpen && el.floor === 0) this.hint('elevator');
+    const rideY = ev.inside && el.moving ? el.y : null;
+    let canMove = true;
     if (this.busy) {
       if (input.forward || input.aboutFace) {
         this.busy = null;
@@ -302,7 +261,9 @@ export class Game {
 
     this.boost = Math.max(0, this.boost - dt);
     this.sipCooldown = Math.max(0, this.sipCooldown - dt);
-    this.player.update(dt, input, { canMove, speedMul: this.boost > 0 ? 1.15 : 1 });
+    this.player.update(dt, input, { canMove, speedMul: this.boost > 0 ? 1.15 : 1, rideY });
+    // Move the car's colliders only after the rider has moved, so the two never overlap mid-step.
+    if (el.dy !== 0) el.placeColliders();
 
     // Spilling coffee while hurrying
     if (this.player.hurrying && s.coffee.sips > 0) {
@@ -326,12 +287,12 @@ export class Game {
       else if (s.coffee.sips > 0 && input.action) { this.sip(); this.actionBuffer = 0; }
     }
 
-    // Doors, elevator, smoker cycle
-    this.updateElevator(dt);
+    // Doors and the smoker cycle on the stair exit
     this.smokerT += dt;
-    const cyc = this.smokerT % 40;
+    const cyc = this.smokerT % SMOKE_EVERY;
     const wasOpen = s.smokerOpen;
-    s.smokerOpen = cyc > 35.5;
+    s.smokerOpen = cyc > SMOKE_EVERY - SMOKE_OPEN;
+    this.smokeIn = s.smokerOpen ? 0 : SMOKE_EVERY - SMOKE_OPEN - cyc;
     if (s.smokerOpen && !wasOpen && this.level.zones.stairDoorInside(p)) this.hud.pop("Door's open, go!", 'good');
     const pp = this.player.position;
     this._doorProbe.set(pp.x, pp.y + 0.85, pp.z);
@@ -342,7 +303,6 @@ export class Game {
     if (this.elapsed > 1.2) this.hint('start');
     if (Z.turnstileFront(pp) && !s.hasBadge) this.hint('turnstile');
     if (Z.stairDoorInside(pp) && !s.smokerOpen) this.hint('stairdoor');
-    if (Z.meetingDoorOutside(pp)) this.hint('meetingdoor');
     if (this.elapsed > 50 && !this.stats.xray) this.hint('xray');
     const warnAt = ROUND_SECONDS - 2 * 45;
     if (this.elapsed > warnAt) this.hint('warn');
@@ -350,10 +310,6 @@ export class Game {
 
     // Floor change → move the shadow light
     if (this.player.floor !== this.lastFloor) { this.lastFloor = this.player.floor; this.onFloorChange(this.lastFloor); }
-
-    // Route tracking for the back-door bonus
-    if (Z.kitchen(pp)) this.cameFromKitchen = true;
-    else if (this.player.floor === 0 || pp.x < 24 || pp.z < 9) this.cameFromKitchen = false;
 
     // Arrival
     if (Z.meeting(pp)) {
@@ -412,8 +368,16 @@ export class Game {
     this.hud.setItems({ floor: this.player.floor === 0 ? 'Lobby' : 'Floor 2', badge: s.hasBadge, coffee: s.coffee.obtained, sips: s.coffee.sips });
 
     // Prompt: busy > interaction > sip > tutorial
+    const el = this.level.elevator;
+    const Z = this.level.zones;
     if (this.busy) {
       this.hud.setPrompt(this.busy.label, { key: null, progress: this.busy.t / this.busy.duration });
+    } else if (el.busy && Z.inCab(p)) {
+      const text = el.moving ? (el.target === 1 ? 'Going up to Floor 2…' : 'Going down to the Lobby…') : 'Doors closing…';
+      this.hud.setPrompt(text, { key: null, progress: el.progress ?? 0 });
+    } else if (Z.stairDoorInside(p) && this.level.stairDoor.open < 0.5) {
+      const n = Math.ceil(this.smokeIn || 0);
+      this.hud.setPrompt(`Badge door · someone comes through in ${n} s`, { key: null, progress: 1 - (this.smokeIn || 0) / (SMOKE_EVERY - SMOKE_OPEN) });
     } else if (near) {
       const l = near.label();
       this.hud.setPrompt(l.text, { key: l.key === null ? null : 'Space' });
@@ -437,7 +401,6 @@ export class Game {
     const late = Math.max(0, this.elapsed - ROUND_SECONDS);
     const left = Math.max(0, ROUND_SECONDS - this.elapsed);
     const rows = [...this.events];
-    if (this.cameFromKitchen) rows.push({ label: 'Route: kitchen back door', pts: 300, n: 1 });
     const mmss = (real) => { const g = Math.floor(real * GAME_SECONDS_PER_REAL); return `${Math.floor(g / 60)}m ${String(g % 60).padStart(2, '0')}s`; };
     if (left > 0) rows.push({ label: `Time to spare (${mmss(left)})`, pts: Math.round(left * 10), n: 1 });
     if (late > 0) rows.push({ label: `Late by ${mmss(late)}`, pts: -Math.round(late * 20), n: 1 });

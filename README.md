@@ -26,7 +26,7 @@ Then open the address it prints (usually http://localhost:5173).
 | C | Crouch on / off |
 | X (hold) | X-ray view |
 | Space | Do the thing in front of you, or sip coffee |
-| Esc | Pause: restart, hints on / off, sound |
+| P or Esc | Pause (resume with P, Esc, Enter, Space or a click): restart, hints on / off, sound |
 
 ## Level 1: "Badge? What Badge?"
 
@@ -34,7 +34,9 @@ Get a coffee, then walk into Meeting 2B on Floor 2. Arriving after 09:00 is allo
 
 - Lobby café latte (slow line) or the kitchen espresso upstairs.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
-- Upstairs, the stair exit is badge-locked (someone steps out every 40 seconds) and Meeting 2B's door is badge-only. The kitchen back door leads straight in.
+- The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
+- The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only; someone steps out every 25 seconds, and an on-screen countdown shows when.
+- Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it.
 
 ## Deploy (Vercel or Netlify)
 

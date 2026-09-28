@@ -149,3 +149,4 @@ h2 { margin: 0; font: 600 44px/1 var(--display); text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+canvas#game:focus { outline: none; }

@@ -113,7 +113,7 @@ export class Player {
   }
 
   // One fixed physics step.
-  update(dt, input, { canMove = true, speedMul = 1 } = {}) {
+  update(dt, input, { canMove = true, speedMul = 1, rideY = null } = {}) {
     this.prevYaw = this.yaw;
 
     // Turning: a quick tap turns a little, holding speeds up.
@@ -143,17 +143,19 @@ export class Player {
     this.speed += Math.sign(target - this.speed) * Math.min(Math.abs(target - this.speed), accel * dt);
     this.moving = this.speed > 0.2;
 
-    // Gravity + move through the character controller.
-    this.vy = Math.max(this.vy - 22 * dt, -20);
+    // Gravity + move through the character controller. When riding a moving elevator the
+    // controller only handles walking around inside the car; height is locked to the car floor.
+    const riding = rideY != null;
+    this.vy = riding ? 0 : Math.max(this.vy - 22 * dt, -20);
     const f = this.forward;
     const d = this._desired;
-    d.x = f.x * this.speed * dt; d.y = this.vy * dt; d.z = f.z * this.speed * dt;
+    d.x = f.x * this.speed * dt; d.y = riding ? 0 : this.vy * dt; d.z = f.z * this.speed * dt;
     this.controller.computeColliderMovement(this.collider, d);
     const mv = this.controller.computedMovement();
-    if (this.controller.computedGrounded()) this.vy = -0.5;
+    if (!riding && this.controller.computedGrounded()) this.vy = -0.5;
     const t = this.body.translation();
     const n = this._next;
-    n.x = t.x + mv.x; n.y = t.y + mv.y; n.z = t.z + mv.z;
+    n.x = t.x + mv.x; n.y = riding ? rideY + CENTER : t.y + mv.y; n.z = t.z + mv.z;
     this.body.setNextKinematicTranslation(n);
 
     // Pose (walk bob, crouch squash) advances with the simulation.

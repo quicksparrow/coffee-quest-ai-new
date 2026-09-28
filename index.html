@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <canvas id="game" tabindex="0"></canvas>
 
   <!-- HUD -->
   <div id="hud" hidden>
@@ -47,7 +47,7 @@
     <div id="keycard">
       <div><kbd>↑</kbd><kbd>←</kbd><kbd>→</kbd><kbd>↓</kbd> walk · turn · about-face</div>
       <div><kbd>Shift</kbd> hurry <kbd>C</kbd> crouch <kbd>X</kbd> x-ray</div>
-      <div><kbd>Space</kbd> do it · sip <kbd>Esc</kbd> pause</div>
+      <div><kbd>Space</kbd> do it · sip <kbd>P</kbd> pause</div>
     </div>
 
     <div id="xray-tag" hidden>X-RAY</div>
@@ -70,7 +70,7 @@
           <div><kbd>C</kbd><span>Crouch</span></div>
           <div><kbd>X</kbd><span>X-ray view (hold)</span></div>
           <div><kbd>Space</kbd><span>Do the thing · sip coffee</span></div>
-          <div><kbd>Esc</kbd><span>Pause</span></div>
+          <div><kbd>P</kbd> or <kbd>Esc</kbd><span>Pause</span></div>
         </div>
         <p class="press" id="press-start" hidden>Press <kbd>Enter</kbd> to start</p>
         <p class="small focus-tip" id="focus-tip" hidden>Keys not responding? Click the game once so it can hear your keyboard.</p>
@@ -89,7 +89,7 @@
     <div class="card narrow">
       <h2>Paused</h2>
       <div class="menu">
-        <div><kbd>Esc</kbd><span>Resume</span></div>
+        <div><kbd>Esc</kbd><kbd>P</kbd><kbd>Enter</kbd><span>Resume</span></div>
         <div><kbd>R</kbd><span>Restart the level</span></div>
         <div><kbd>H</kbd><span>Hints from Sam: <b id="hints-state">On</b></span></div>
         <div><kbd>M</kbd><span>Sound: <b id="sound-state">On</b></span></div>

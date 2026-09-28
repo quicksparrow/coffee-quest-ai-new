@@ -57,7 +57,8 @@ async function boot() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xc9d6e3);
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.05, 120);
+  // A 0.1 m near plane keeps depth precision high enough that floors and decals never flicker.
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 90);
 
   scene.add(new THREE.HemisphereLight(0xf4f7fb, 0x9aa0a8, 1.7));
   // "Sun through the windows": one shadow light that follows the player and sits just under
@@ -113,6 +114,7 @@ async function boot() {
   let mode = 'start'; // start | playing | paused | end
   let ready = false;  // keys are ignored until shaders are warm
   let acc = 0;        // simulation time not yet stepped
+  let skipDelta = false;
   let dirty = true;   // outside of play we only redraw when something changed
   const showScreen = (id) => ['start', 'pause', 'end'].forEach((s) => { $(s).hidden = s !== id; });
   const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; } };
@@ -154,22 +156,32 @@ async function boot() {
     showScreen(null);
     hud.show(true);
   };
-  const resume = () => { input.endFrame(); acc = 0; mode = 'playing'; showScreen(null); };
+  const resume = () => {
+    if (mode !== 'paused') return;
+    input.endFrame();
+    acc = 0;
+    skipDelta = true;                 // don't count the paused time as one giant frame
+    mode = 'playing';
+    showScreen(null);
+    canvas.focus?.();
+  };
 
   window.addEventListener('keydown', (e) => {
     if (e.repeat || !ready) return;
     const enter = e.code === 'Enter' || e.code === 'NumpadEnter';
     if (mode === 'start' && enter && !needsKeyboardNotice()) startGame();
     else if (mode === 'end' && enter) startGame();
-    else if (mode === 'playing' && e.code === 'Escape') pause();
+    else if (mode === 'playing' && (e.code === 'Escape' || e.code === 'KeyP')) pause();
     else if (mode === 'paused') {
-      if (e.code === 'Escape' || enter) resume();
-      if (e.code === 'KeyR') startGame();
+      if (e.code === 'Escape' || e.code === 'KeyP' || e.code === 'Space' || enter) resume();
+      else if (e.code === 'KeyR') startGame();
       if (e.code === 'KeyH') { game.hintsOn = !game.hintsOn; $('hints-state').textContent = game.hintsOn ? 'On' : 'Off'; }
       if (e.code === 'KeyM') { sfx.enabled = !sfx.enabled; $('sound-state').textContent = sfx.enabled ? 'On' : 'Off'; }
     }
   });
   window.addEventListener('blur', pause);
+  // Clicking the pause screen also resumes (a click is often how focus comes back to the game).
+  $('pause').addEventListener('click', resume);
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -198,7 +210,8 @@ async function boot() {
   function frame(t) {
     requestAnimationFrame(frame);
     timer.update(t);
-    const raw = timer.getDelta();
+    let raw = timer.getDelta();
+    if (skipDelta) { raw = 0; skipDelta = false; }
     const dt = Math.min(raw, 0.1);
     const noticeOnly = mode === 'start' && needsKeyboardNotice();
 
@@ -215,6 +228,7 @@ async function boot() {
       }
       if (steps === MAX_STEPS) acc = 0;      // fell far behind (tab hiccup): don't spiral
       player.interpolate(acc / STEP);
+      level.elevator.interpolate(acc / STEP);
       camCtl.update(dt, player);
       placeSun(player.floor, player.renderPos.x, player.renderPos.z);
       if (mode === 'playing') game.updateHud(dt);
