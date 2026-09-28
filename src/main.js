@@ -12,7 +12,8 @@ import { Hud } from './ui/hud.js';
 // Start downloading the physics engine right away, in parallel with everything else.
 // It is the largest file, lives in its own chunk, and stays cached between game updates.
 const rapierReady = import('@dimforge/rapier3d');
-const charactersReady = loadCharacterAssets('./models/').catch((err) => { console.error(err); return null; });
+let charError = null;
+const charactersReady = loadCharacterAssets('./models/').catch((err) => { console.error(err); charError = err; return null; });
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;       // fixed simulation step
@@ -128,14 +129,20 @@ async function boot() {
   const camCtl = new FollowCamera(camera, world, RAPIER);
 
   // ---------- Characters: Claire or Steven, plus the receptionist and barista ----------
-  const charAssets = await charactersReady;
+  let charAssets = await charactersReady;
   const LOOK_KEY = 'coffee-quest-commuter';
   let look = { kind: 0, ...randomLook() };          // clothes, skin and hair are random every run
   try { const saved = Number(localStorage.getItem(LOOK_KEY)); if (saved === 0 || saved === 1) look.kind = saved; } catch { /* private mode */ }
   const choices = {};
   const npcs = [];
   if (charAssets) {
-    KINDS.forEach((k) => { choices[k] = new Character(charAssets, k); });
+    try {
+      KINDS.forEach((k) => { choices[k] = new Character(charAssets, k); });
+    } catch (err) {
+      console.error(err); charError = err; charAssets = null;
+    }
+  }
+  if (charAssets) {
     // Lobby staff: a random look each visit, a name tag, and they turn to greet you.
     const npc = (kind, x, z, yaw, name, role) => {
       const c = new Character(charAssets, kind);
@@ -157,11 +164,11 @@ async function boot() {
     level.barista = npc('man', 21, 21.4, 0, 'Leo', 'Barista');
   }
   const applyLook = () => {
+    try { localStorage.setItem(LOOK_KEY, String(look.kind)); } catch { /* ignore */ }
     const c = choices[KINDS[look.kind]];
     if (!c) return;
     c.setOutfit(look.outfit); c.setSkin(look.skin); c.setHair(look.hair);
     if (player.char !== c) player.setCharacter(c);
-    try { localStorage.setItem(LOOK_KEY, String(look.kind)); } catch { /* ignore */ }
   };
   const shuffleLook = () => { look = { ...look, ...randomLook() }; applyLook(); };
   applyLook();
@@ -215,9 +222,14 @@ async function boot() {
   const renderPicker = () => {
     $('opt-kind').innerHTML = KINDS.map((k, i) => `<span class="chipopt${i === look.kind ? ' on' : ''}">${NAMES[k]}</span>`).join('');
   };
-  if (charAssets) renderPicker(); else $('picker').hidden = true;
+  renderPicker();
+  if (!charAssets) {
+    // Keep the choice working and say what went wrong instead of silently hiding it.
+    const note = $('char-error');
+    note.textContent = `The 3D characters didn't load (${charError?.message || 'unknown error'}), so you'll play as a stand-in. Reloading the page usually fixes it.`;
+    note.hidden = false;
+  }
   const pickerKey = (code) => {
-    if (!charAssets) return;
     if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(code)) {
       look.kind = (look.kind + 1) % KINDS.length;
       shuffleLook();

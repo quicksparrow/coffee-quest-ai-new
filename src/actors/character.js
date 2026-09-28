@@ -44,18 +44,67 @@ const CUT = {
   woman: { shoeTop: 0.085, hem: 0.16, waist: 0.99, neck: 1.46, neckFront: 1.37, neckSlope: -6.5, armX: 0.17, sleeveX: 0.5, tie: 0, bottom: 0x2c3550 },
 };
 
-// The playable preview link can't serve .glb files, so its build ships the same models as
-// self-contained .json glTF (VITE_MODEL_EXT=json). Regular builds use .glb.
-const EXT = import.meta.env.VITE_MODEL_EXT || 'glb';
+// Model files. Regular builds download the four .glb files. The playable preview link can't
+// serve .glb files and blocks data:/blob: addresses, so its build (VITE_MODELS=embed) bakes the
+// same bytes into JavaScript chunks and decodes them here, with no web request at all.
+const MODEL_NAMES = ['woman', 'man', 'anims-1', 'anims-2'];
+const EMBED = import.meta.env.VITE_MODELS === 'embed';
+
+function base64ToBuffer(dataUrl) {
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1); // accepts a bare base64 string too
+  if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64).buffer;
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
+async function modelBytes(base, name) {
+  if (EMBED) {
+    const { EMBEDDED } = await import('./embedded-models.js');
+    return base64ToBuffer(await EMBEDDED[name]());
+  }
+  const res = await fetch(`${base}${name}.glb`);
+  if (!res.ok) throw new Error(`${name}.glb: HTTP ${res.status}`);
+  return res.arrayBuffer();
+}
+
+// The characters' textures are WebP images stored inside the model. three.js normally decodes
+// them through a blob: address (and tests WebP support with a data: image), which strict hosts
+// block. Decode them straight from the bytes instead. Registered under the same name, this
+// replaces the built-in EXT_texture_webp handler.
+const FILTERS = { 9728: THREE.NearestFilter, 9729: THREE.LinearFilter, 9984: THREE.NearestMipmapNearestFilter, 9985: THREE.LinearMipmapNearestFilter, 9986: THREE.NearestMipmapLinearFilter, 9987: THREE.LinearMipmapLinearFilter };
+const WRAPS = { 33071: THREE.ClampToEdgeWrapping, 33648: THREE.MirroredRepeatWrapping, 10497: THREE.RepeatWrapping };
+const directTextures = (parser) => ({
+  name: 'EXT_texture_webp',
+  async loadTexture(index) {
+    const json = parser.json;
+    const def = json.textures[index];
+    const img = json.images[def.extensions?.EXT_texture_webp?.source ?? def.source];
+    if (img?.bufferView === undefined) return null; // not embedded: let three.js handle it
+    const bytes = await parser.getDependency('bufferView', img.bufferView);
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: img.mimeType || 'image/webp' }),
+      { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    const tex = new THREE.Texture(bitmap);
+    tex.name = def.name || img.name || '';
+    tex.flipY = false;
+    const s = json.samplers?.[def.sampler] || {};
+    tex.magFilter = FILTERS[s.magFilter] ?? THREE.LinearFilter;
+    tex.minFilter = FILTERS[s.minFilter] ?? THREE.LinearMipmapLinearFilter;
+    tex.wrapS = WRAPS[s.wrapS] ?? THREE.RepeatWrapping;
+    tex.wrapT = WRAPS[s.wrapT] ?? THREE.RepeatWrapping;
+    tex.needsUpdate = true;
+    parser.associations.set(tex, { textures: index });
+    return tex;
+  },
+});
 
 export async function loadCharacterAssets(base = './models/') {
-  const loader = new GLTFLoader();
-  const [woman, man, a1, a2] = await Promise.all([
-    loader.loadAsync(`${base}woman.${EXT}`),
-    loader.loadAsync(`${base}man.${EXT}`),
-    loader.loadAsync(`${base}anims-1.${EXT}`),
-    loader.loadAsync(`${base}anims-2.${EXT}`),
-  ]);
+  const loader = new GLTFLoader().register(directTextures);
+  const [woman, man, a1, a2] = await Promise.all(MODEL_NAMES.map(async (name) => {
+    const bytes = await modelBytes(base, name);
+    return loader.parseAsync(bytes, base);
+  }));
   const clips = {};
   [...a1.animations, ...a2.animations].forEach((c) => { clips[c.name] = c; });
   return { models: { woman: woman.scene, man: man.scene }, clips };

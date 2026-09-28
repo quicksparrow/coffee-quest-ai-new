@@ -77,7 +77,7 @@ src/ui/                 HUD updates
 
 Claire, Steven and the lobby staff use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping coffee blends the drink animation onto the arm while you keep walking.
 
-`public/models/` holds the web-ready files. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
+`public/models/` holds the web-ready files. The game downloads them with a plain request and decodes their textures directly from the file, so it doesn't depend on `blob:` or `data:` addresses that strict hosts block; if they ever fail to load, the start screen says why and you play as a stand-in. For hosts that can't serve `.glb` files at all, `VITE_MODELS=embed npm run build` bakes the models into the JavaScript instead. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
 
 ## Status
 

@@ -176,3 +176,4 @@ canvas#game:focus { outline: none; }
 .controls summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .controls .keys { margin-top: 10px; }
 @media (max-width: 720px) { .screen.start { place-items: center; padding-left: 20px; background: rgba(13,17,22,.9); } }
+.char-error { margin: 2px 0 0 10px; color: var(--espresso); }
