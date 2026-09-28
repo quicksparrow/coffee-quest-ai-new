@@ -17,16 +17,16 @@ Then open the address it prints (usually http://localhost:5173).
 
 ## Choose your commuter
 
-The start screen lets you pick who you play: a woman or a man, the color of their top, skin tone and hair color. Use ↑ ↓ to pick a row, ← → to change it, and Enter to start. Your choice is remembered for next time.
+The start screen lets you play as **Claire** or **Steven** (← → to switch, Enter to start; your pick is remembered). Their outfit color, skin tone and hair color are random every run; press Space on the start screen for a new one.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| ↑ or W | Walk forward |
+| ↑ or W | Move forward (a brisk jog: you're late) |
 | ← → or A D | Turn |
 | ↓ or S | Turn around |
-| Shift (hold) | Hurry (spills coffee) |
+| Shift (hold) | Sprint (spills coffee) |
 | C | Crouch on / off |
 | X (hold) | X-ray view |
 | Space | Do the thing in front of you, or sip coffee |
@@ -36,7 +36,7 @@ The start screen lets you pick who you play: a woman or a man, the color of thei
 
 Get a coffee, then walk into Meeting 2B on Floor 2. Arriving after 09:00 is allowed but costs points.
 
-- Lobby café latte (slow line) or the kitchen espresso upstairs.
+- Lobby café latte or the kitchen espresso upstairs, as many as you like: finish your cup and grab another. Dana at reception and Leo at the café have name tags and turn to greet you.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
 - The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
 - The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
@@ -75,7 +75,7 @@ src/ui/                 HUD updates
 
 ## Characters
 
-The player and the two lobby staff use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping coffee blends the drink animation onto the arm while you keep walking.
+Claire, Steven and the lobby staff use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping coffee blends the drink animation onto the arm while you keep walking.
 
 `public/models/` holds the web-ready files. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
 

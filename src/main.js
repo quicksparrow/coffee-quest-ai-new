@@ -5,7 +5,7 @@ import { Game } from './core/game.js';
 import { Builder } from './world/builder.js';
 import { buildLevel, F2 } from './world/level1.js';
 import { Player } from './actors/player.js';
-import { loadCharacterAssets, Character, OUTFITS, SKINS, HAIRS, KINDS } from './actors/character.js';
+import { loadCharacterAssets, Character, KINDS, NAMES, randomLook } from './actors/character.js';
 import { FollowCamera } from './systems/camera.js';
 import { Hud } from './ui/hud.js';
 
@@ -37,6 +37,29 @@ const refreshFocusTip = () => { $('focus-tip').hidden = document.hasFocus(); };
 refreshFocusTip();
 window.addEventListener('focus', refreshFocusTip);
 window.addEventListener('blur', refreshFocusTip);
+
+// Floating name tag for the lobby staff (a sprite that always faces the camera).
+function nameTag(name, role) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 160;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(20,26,35,0.82)';
+  ctx.beginPath(); ctx.roundRect(8, 16, 496, 128, 40); ctx.fill();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#eef1f5';
+  ctx.font = '600 56px "IBM Plex Sans", Arial, sans-serif';
+  ctx.fillText(name, 256, 80);
+  ctx.fillStyle = '#d6a27c';
+  ctx.font = '500 34px "IBM Plex Mono", monospace';
+  ctx.fillText(role.toUpperCase(), 256, 124);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // Constant size on screen (about 5% of its height) so it reads from across the lobby.
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, sizeAttenuation: false }));
+  s.scale.set(0.19, 0.06, 1);
+  s.renderOrder = 5;
+  return s;
+}
 
 async function boot() {
   // ---------- Renderer, scene, lights ----------
@@ -104,36 +127,43 @@ async function boot() {
   const player = new Player(scene, world, RAPIER, level.spawn, level.spawnYaw);
   const camCtl = new FollowCamera(camera, world, RAPIER);
 
-  // ---------- Characters: the two player choices plus the receptionist and barista ----------
+  // ---------- Characters: Claire or Steven, plus the receptionist and barista ----------
   const charAssets = await charactersReady;
-  const LOOK_KEY = 'coffee-quest-look';
-  let look = { kind: 0, outfit: 0, skin: 1, hair: 1 };
-  try { look = { ...look, ...JSON.parse(localStorage.getItem(LOOK_KEY) || '{}') }; } catch { /* private mode */ }
+  const LOOK_KEY = 'coffee-quest-commuter';
+  let look = { kind: 0, ...randomLook() };          // clothes, skin and hair are random every run
+  try { const saved = Number(localStorage.getItem(LOOK_KEY)); if (saved === 0 || saved === 1) look.kind = saved; } catch { /* private mode */ }
   const choices = {};
   const npcs = [];
   if (charAssets) {
     KINDS.forEach((k) => { choices[k] = new Character(charAssets, k); });
-    const npc = (kind, x, z, yaw, { outfit, skin, hair }) => {
+    // Lobby staff: a random look each visit, a name tag, and they turn to greet you.
+    const npc = (kind, x, z, yaw, name, role) => {
       const c = new Character(charAssets, kind);
-      c.setOutfit(outfit); c.setSkin(skin); c.setHair(hair);
+      const l = randomLook();
+      c.setOutfit(l.outfit); c.setSkin(l.skin); c.setHair(l.hair);
       const g = new THREE.Group();
       g.position.set(x, 0, z);
       g.rotation.y = yaw;
       g.add(c.root);
       scene.add(g);
-      npcs.push(c);
-      return c;
+      const tag = nameTag(name, role);
+      tag.position.set(x, 2.25, z);
+      scene.add(tag);
+      const n = { c, g, tag, homeYaw: yaw, greeted: false };
+      npcs.push(n);
+      return n;
     };
-    level.receptionist = npc('woman', 3.5, 13.7, Math.PI, { outfit: 4, skin: 2, hair: 0 });
-    level.barista = npc('man', 21, 21.4, 0, { outfit: 1, skin: 3, hair: 0 });
+    level.receptionist = npc('woman', 3.5, 13.7, Math.PI, 'Dana', 'Reception');
+    level.barista = npc('man', 21, 21.4, 0, 'Leo', 'Barista');
   }
   const applyLook = () => {
     const c = choices[KINDS[look.kind]];
     if (!c) return;
     c.setOutfit(look.outfit); c.setSkin(look.skin); c.setHair(look.hair);
     if (player.char !== c) player.setCharacter(c);
-    try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* ignore */ }
+    try { localStorage.setItem(LOOK_KEY, String(look.kind)); } catch { /* ignore */ }
   };
+  const shuffleLook = () => { look = { ...look, ...randomLook() }; applyLook(); };
   applyLook();
 
   const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xd6a27c }));
@@ -171,7 +201,7 @@ async function boot() {
       $('end-breakdown').innerHTML = '';
       r.rows.forEach((row) => {
         const tr = document.createElement('tr');
-        const label = row.label === 'Sips' ? `Sips (${row.n})` : row.label;
+        const label = ['Sips', 'Refills'].includes(row.label) ? `${row.label} (${row.n})` : row.label;
         tr.innerHTML = `<td></td><td class="${row.pts < 0 ? 'neg' : ''}">${row.pts > 0 ? '+' : ''}${row.pts.toLocaleString('en-US')}</td>`;
         tr.firstChild.textContent = label;
         $('end-breakdown').appendChild(tr);
@@ -182,38 +212,17 @@ async function boot() {
   });
 
   // ---------- Character picker (start screen), keyboard only ----------
-  const ROWS = [
-    { key: 'kind', count: KINDS.length, render: (i, on) => `<span class="chipopt${on ? ' on' : ''}">${KINDS[i] === 'woman' ? 'Woman' : 'Man'}</span>` },
-    { key: 'outfit', count: OUTFITS.length, swatch: (i) => `#${OUTFITS[i].color.toString(16).padStart(6, '0')}`, name: (i) => OUTFITS[i].name },
-    { key: 'skin', count: SKINS.length, swatch: (i) => skinSwatch(i), name: (i) => SKINS[i].name },
-    { key: 'hair', count: HAIRS.length, swatch: (i) => `#${HAIRS[i].color.toString(16).padStart(6, '0')}`, name: (i) => HAIRS[i].name },
-  ];
-  function skinSwatch(i) {
-    const base = [0.78, 0.58, 0.45];
-    const c = base.map((v, k) => Math.min(255, Math.round(255 * v * SKINS[i].tint[k])));
-    return `rgb(${c.join(',')})`;
-  }
-  let activeRow = 0;
   const renderPicker = () => {
-    ROWS.forEach((row, r) => {
-      const el = $(`opt-${row.key}`);
-      const v = look[row.key];
-      el.innerHTML = row.render
-        ? Array.from({ length: row.count }, (_, i) => row.render(i, i === v)).join('')
-        : Array.from({ length: row.count }, (_, i) => `<span class="sw${i === v ? ' on' : ''}" style="background:${row.swatch(i)}"></span>`).join('') + `<span class="sw-name">${row.name(v)}</span>`;
-      el.parentElement.classList.toggle('active', r === activeRow);
-    });
+    $('opt-kind').innerHTML = KINDS.map((k, i) => `<span class="chipopt${i === look.kind ? ' on' : ''}">${NAMES[k]}</span>`).join('');
   };
   if (charAssets) renderPicker(); else $('picker').hidden = true;
   const pickerKey = (code) => {
     if (!charAssets) return;
-    if (code === 'ArrowUp' || code === 'KeyW') activeRow = (activeRow + ROWS.length - 1) % ROWS.length;
-    else if (code === 'ArrowDown' || code === 'KeyS') activeRow = (activeRow + 1) % ROWS.length;
-    else if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(code)) {
-      const row = ROWS[activeRow];
-      const d = code === 'ArrowLeft' || code === 'KeyA' ? -1 : 1;
-      look[row.key] = (look[row.key] + d + row.count) % row.count;
-      applyLook();
+    if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(code)) {
+      look.kind = (look.kind + 1) % KINDS.length;
+      shuffleLook();
+    } else if (code === 'Space') {
+      shuffleLook();
     } else return;
     renderPicker();
   };
@@ -234,7 +243,7 @@ async function boot() {
     camera.clearViewOffset();
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
     camCtl.snap();
-    if (mode === 'end' || mode === 'paused') game.reset();
+    if (mode === 'end' || mode === 'paused') { game.reset(); shuffleLook(); resetNpcs(); }
     input.endFrame();                 // drop any keys pressed while a menu was open
     mode = 'playing';
     acc = 0;
@@ -340,10 +349,29 @@ async function boot() {
   function animateCharacters(dt) {
     player.animate(dt);
     const label = game.busy?.label || '';
-    level.receptionist?.play(label.includes('reception') ? 'talk' : 'idle');
-    level.barista?.play(label.includes('line') ? 'talk' : 'idle');
-    for (const c of npcs) c.update(dt);
+    const p = player.renderPos;
+    for (const n of npcs) {
+      const dx = p.x - n.g.position.x, dz = p.z - n.g.position.z, d = Math.hypot(dx, dz);
+      const near = mode === 'playing' && player.floor === 0 && d < 6;
+      // Turn toward the player when they come close (within reason), then back.
+      let want = n.homeYaw;
+      if (near) {
+        const face = Math.atan2(dx, dz);
+        const off = Math.atan2(Math.sin(face - n.homeYaw), Math.cos(face - n.homeYaw));
+        want = n.homeYaw + THREE.MathUtils.clamp(off, -1.1, 1.1);
+      }
+      const diff = Math.atan2(Math.sin(want - n.g.rotation.y), Math.cos(want - n.g.rotation.y));
+      n.g.rotation.y += diff * (1 - Math.exp(-dt * 4));
+      const serving = (n === level.receptionist && label.includes('reception')) || (n === level.barista && label.includes('line'));
+      if (near && d < 4.5 && !n.greeted) { n.greeted = true; n.c.play('cheer', 0.2); n.greetT = 2.2; }
+      n.greetT = Math.max(0, (n.greetT || 0) - dt);
+      if (n.greetT === 0) n.c.play(serving ? 'talk' : 'idle');
+      n.tag.material.opacity += ((player.floor === 0 && d < 12 ? 1 : 0) - n.tag.material.opacity) * (1 - Math.exp(-dt * 6));
+      n.c.update(dt);
+    }
   }
+
+  function resetNpcs() { for (const n of npcs) { n.greeted = false; n.greetT = 0; } }
 
   function adaptQuality(raw) {
     quality.acc += raw;

@@ -13,7 +13,7 @@ const HINTS = {
   start: "Call's at 9:00 in Meeting 2B, Floor 2. Don't show up without coffee!",
   turnstile: "No badge again? Ask reception for a visitor pass. Or sneak round through the mailroom, that door is always propped open.",
   visitor: 'Visitor pass works on the turnstiles and the elevators. Not on the doors upstairs, though.',
-  coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost.',
+  coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost. Finished it? Grab another, as many as you like.',
   spill: 'Careful! Hurrying spills your coffee.',
   stairdoor: "That door needs a badge. Someone's about to step out for a smoke. Wait right by it and walk in after them.",
   elevator: 'Just step in and wait, it goes on its own. Or press Space to leave right away.',
@@ -105,14 +105,14 @@ export class Game {
       },
       {
         pos: P.cafe, radius: 2, floor: 0,
-        enabled: () => !s.coffee.latte,
-        label: () => ({ text: 'Get in line for a latte' }),
-        use: () => this.startBusy('Waiting in line…', 6, 'phone', () => this.gotCoffee('latte')),
+        enabled: () => s.coffee.sips === 0,        // as many coffees as you like, one cup at a time
+        label: () => ({ text: s.coffee.latte ? 'Get another latte' : 'Get in line for a latte' }),
+        use: () => this.startBusy('Waiting in line…', 4, 'phone', () => this.gotCoffee('latte')),
       },
       {
         pos: P.espresso, radius: 1.7, floor: 1,
-        enabled: () => !s.coffee.espresso,
-        label: () => ({ text: 'Pull an espresso shot' }),
+        enabled: () => s.coffee.sips === 0,
+        label: () => ({ text: s.coffee.espresso ? 'Pull another shot' : 'Pull an espresso shot' }),
         use: () => this.startBusy('Pulling a shot…', 2.5, null, () => this.gotCoffee('espresso')),
       },
       call(0, P.callG),
@@ -158,15 +158,18 @@ export class Game {
   gotCoffee(kind) {
     const c = this.state.coffee;
     this.player.cup.visible = true;
+    const firstOfKind = !c[kind];
     c[kind] = true;
     c.count += 1;
-    c.sips = kind === 'latte' ? 3 : Math.min(3, c.sips + 1);
+    c.sips = kind === 'latte' ? 3 : Math.min(3, c.sips + 2);
     if (!c.obtained) {
       c.obtained = true;
       this.score('First coffee', 500);
       this.hint('coffee');
+    } else if (firstOfKind) {
+      this.score('Second kind of coffee', 750);   // latte + espresso, once
     } else {
-      this.score('Second coffee', 750);
+      this.score('Refills', 100, true);
     }
     this.sfx.coin();
   }
@@ -185,7 +188,8 @@ export class Game {
   score(label, pts, merge = false) {
     const existing = merge && this.events.find((e) => e.label === label);
     if (existing) { existing.pts += pts; existing.n += 1; } else this.events.push({ label, pts, n: 1 });
-    this.hud.pop(`+${pts} ${label === 'Sips' ? 'sip' : label.toLowerCase()}`);
+    const short = { Sips: 'sip', Refills: 'refill', 'Second kind of coffee': 'second coffee' }[label] || label.toLowerCase();
+    this.hud.pop(`+${pts} ${short}`);
   }
 
   hint(id) {
@@ -373,7 +377,7 @@ export class Game {
     const angle = Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz);
     const sameFloor = (g.pt.y > 2 ? 1 : 0) === this.player.floor;
     this.hud.setGoal(g.title, g.sub, angle, sameFloor ? Math.hypot(dx, dz) : null);
-    this.marker.visible = sameFloor;
+    this.marker.visible = sameFloor && Math.hypot(dx, dz) > 5;   // hide it once you're there
     this.marker.position.set(g.pt.x, g.pt.y + 2.4 + Math.sin(this.elapsed * 2.5) * 0.15, g.pt.z);
     this.marker.rotation.y += dt * 1.8;
 

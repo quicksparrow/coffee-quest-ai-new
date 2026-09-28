@@ -30,6 +30,13 @@ export const HAIRS = [
   { name: 'Blonde', color: 0xd6b27a },
 ];
 export const KINDS = ['woman', 'man'];
+export const NAMES = { woman: 'Claire', man: 'Steven' };
+
+// A random outfit, skin tone and hair color (picked fresh every run).
+export function randomLook() {
+  const pick = (n) => Math.floor(Math.random() * n);
+  return { outfit: pick(OUTFITS.length), skin: pick(SKINS.length), hair: pick(HAIRS.length) };
+}
 
 // Bind-pose measurements (metres, model space: Y up, facing +Z, T-pose).
 const CUT = {
@@ -119,10 +126,10 @@ float cloth = 0.0;
   return m;
 }
 
-const LOOP = { idle: 'Idle_Loop', walk: 'Walk_Formal_Loop', hurry: 'Jog_Fwd_Loop', crouch: 'Crouch_Idle_Loop', crouchWalk: 'Crouch_Fwd_Loop', phone: 'Idle_TalkingPhone_Loop', talk: 'Idle_Talking_Loop', arms: 'Idle_FoldArms_Loop', cheer: 'Yes' };
+const LOOP = { idle: 'Idle_Loop', walk: 'Walk_Loop', jog: 'Jog_Fwd_Loop', hurry: 'Sprint_Loop', crouch: 'Crouch_Idle_Loop', crouchWalk: 'Crouch_Fwd_Loop', phone: 'Idle_TalkingPhone_Loop', talk: 'Idle_Talking_Loop', arms: 'Idle_FoldArms_Loop', cheer: 'Yes' };
 // Natural ground speed of each locomotion clip at timeScale 1 (m/s), measured from the clips'
 // foot travel, so playback speed can match movement speed and feet don't slide.
-export const CLIP_SPEED = { walk: 1.25, hurry: 4.2, crouchWalk: 0.8 };
+export const CLIP_SPEED = { walk: 1.25, jog: 4.2, hurry: 6.5, crouchWalk: 0.8 };
 const SIP_BONES = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_.*l$|^(neck_01|Head)$/;
 
 export class Character {

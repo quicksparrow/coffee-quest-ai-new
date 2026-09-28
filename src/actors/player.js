@@ -5,7 +5,8 @@ const HALF = 0.5;      // capsule half-height (cylinder part)
 const RADIUS = 0.35;
 const CENTER = HALF + RADIUS + 0.01; // capsule center above the feet
 
-export const SPEED = { walk: 2.4, hurry: 5.0, crouch: 1.4 };
+// Brisk: you're late. Normal movement is a light jog, Shift breaks into a sprint.
+export const SPEED = { walk: 3.6, hurry: 6.4, crouch: 1.6 };
 const TURN_MIN = 1.5;    // rad/s on a quick tap (precise aiming)
 const TURN_MAX = 3.0;    // rad/s once the key is held
 const TURN_RAMP = 0.3;   // seconds to reach full turn speed
@@ -117,8 +118,8 @@ export class Player {
     if (!this.oneShot) {
       let key = this.idleStyle || 'idle';
       if (this.crouching) key = this.moving ? 'crouchWalk' : 'crouch';
-      else if (this.moving) key = this.hurrying || this.speed > SPEED.walk * 1.2 ? 'hurry' : 'walk';
-      c.play(key, key === 'walk' && c.currentKey === 'hurry' ? 0.35 : 0.22);
+      else if (this.moving) key = this.hurrying || this.speed > SPEED.walk * 1.15 ? 'hurry' : this.speed > 2.2 ? 'jog' : 'walk';
+      c.play(key, 0.25);
       const clipSpeed = CLIP_SPEED[key];
       c.current.timeScale = clipSpeed ? THREE.MathUtils.clamp(this.speed / clipSpeed, 0.5, 2.2) : 1;
     }
