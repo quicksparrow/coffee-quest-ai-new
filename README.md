@@ -15,6 +15,10 @@ npm run dev
 
 Then open the address it prints (usually http://localhost:5173).
 
+## Choose your commuter
+
+The start screen lets you pick who you play: a woman or a man, the color of their top, skin tone and hair color. Use ↑ ↓ to pick a row, ← → to change it, and Enter to start. Your choice is remembered for next time.
+
 ## Controls
 
 | Key | Action |
@@ -35,7 +39,7 @@ Get a coffee, then walk into Meeting 2B on Floor 2. Arriving after 09:00 is allo
 - Lobby café latte (slow line) or the kitchen espresso upstairs.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
 - The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
-- The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only; someone steps out every 25 seconds, and an on-screen countdown shows when.
+- The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
 - Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it.
 
 ## Deploy (Vercel or Netlify)
@@ -54,7 +58,7 @@ src/core/game.js        game rules: clock, score, hints, elevator, goal tracker
 src/core/rapier-wasm.js loads the physics engine's WebAssembly as a streamed .wasm file
 src/core/               keyboard input, sound
 src/world/              level layout, doors and turnstiles, graybox building helpers
-src/actors/             the player
+src/actors/             the player and the animated characters
 src/systems/            follow camera
 src/ui/                 HUD updates
 ```
@@ -69,6 +73,12 @@ src/ui/                 HUD updates
 - Downloads are split so game updates only re-download the small game file: three.js, the physics code and the physics WebAssembly are separate, cacheable files.
 - Add `?debug` to the URL to log boot timings and expose `window.__coffeeQuest` for testing.
 
+## Characters
+
+The player and the two lobby staff use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping coffee blends the drink animation onto the arm while you keep walking.
+
+`public/models/` holds the web-ready files. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
+
 ## Status
 
-Graybox build (stage 1 of the plan): plain blocks instead of art, every route playable end to end. Next: character select with two player models, then coworkers with patrols, sight cones and hiding spots.
+Stage 2 of the plan: character select and animated characters, on the graybox level. Next: coworkers with patrols, sight cones, conversations and hiding spots.

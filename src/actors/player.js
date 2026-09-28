@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { CLIP_SPEED } from './character.js';
 
 const HALF = 0.5;      // capsule half-height (cylinder part)
 const RADIUS = 0.35;
 const CENTER = HALF + RADIUS + 0.01; // capsule center above the feet
 
-export const SPEED = { walk: 3.4, hurry: 6.0, crouch: 1.8 };
+export const SPEED = { walk: 2.4, hurry: 5.0, crouch: 1.4 };
 const TURN_MIN = 1.5;    // rad/s on a quick tap (precise aiming)
 const TURN_MAX = 3.0;    // rad/s once the key is held
 const TURN_RAMP = 0.3;   // seconds to reach full turn speed
@@ -64,12 +65,13 @@ export class Player {
     // Drawn after the walls so the see-through fade (camera pressed against a wall) blends correctly.
     [torso, head, nose, bag].forEach((m) => { m.castShadow = true; m.renderOrder = 3; this.inner.add(m); });
 
-    // Coffee cup held in the right hand.
+    // Takeaway coffee cup (held in the left hand once the player has one).
     this.cup = new THREE.Group();
-    const cupBody = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.055, 0.17, 16), new THREE.MeshStandardMaterial({ color: 0xf2efe9 }));
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.073, 0.064, 0.07, 16), new THREE.MeshStandardMaterial({ color: 0x8a5a3c }));
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.025, 16), new THREE.MeshStandardMaterial({ color: 0x2b2b2b }));
-    lid.position.y = 0.095;
+    const cupBody = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.034, 0.13, 16), new THREE.MeshStandardMaterial({ color: 0xf2efe9 }));
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.04, 0.055, 16), new THREE.MeshStandardMaterial({ color: 0x8a5a3c }));
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.02, 16), new THREE.MeshStandardMaterial({ color: 0x2b2b2b }));
+    lid.position.y = 0.072;
+    [cupBody, sleeve, lid].forEach((m) => { m.castShadow = true; });
     this.cup.add(cupBody, sleeve, lid);
     this.cup.position.set(0.38, 0.95, -0.22);
     this.cup.visible = false;
@@ -79,6 +81,55 @@ export class Player {
     scene.add(this.group);
     this.capture(true);
     this.interpolate(1);
+    this.sipT = 0;
+    this.oneShot = null;
+    this.idleStyle = null;
+  }
+
+  // Swap the capsule placeholder for a real animated character.
+  setCharacter(char) {
+    if (this.char) this.group.remove(this.char.root);
+    this.char = char;
+    this.inner.visible = false;
+    this.group.add(char.root);
+    char.attachToLeftHand(this.cup);
+    this.oneShot = null;
+    char.play('idle', 0);
+  }
+
+  // Play a one-off animation (reaching for a counter, pressing a button). Walking away cancels it.
+  playOnce(key) {
+    if (!this.char) return;
+    this.oneShot = key;
+    this.char.play(key, 0.15);
+  }
+
+  sip() { this.sipT = 0.001; }
+
+  // Per rendered frame: pick the animation for what the player is doing and advance it.
+  animate(dt) {
+    const c = this.char;
+    if (!c) return;
+    if (this.oneShot) {
+      const a = c.actions[this.oneShot];
+      if (this.moving || !a.isRunning()) this.oneShot = null;
+    }
+    if (!this.oneShot) {
+      let key = this.idleStyle || 'idle';
+      if (this.crouching) key = this.moving ? 'crouchWalk' : 'crouch';
+      else if (this.moving) key = this.hurrying || this.speed > SPEED.walk * 1.2 ? 'hurry' : 'walk';
+      c.play(key, key === 'walk' && c.currentKey === 'hurry' ? 0.35 : 0.22);
+      const clipSpeed = CLIP_SPEED[key];
+      c.current.timeScale = clipSpeed ? THREE.MathUtils.clamp(this.speed / clipSpeed, 0.5, 2.2) : 1;
+    }
+    c.update(dt);
+    if (this.sipT > 0) {
+      this.sipT += dt;
+      const d = c.sipDuration;
+      const w = Math.min(1, this.sipT / 0.25, (d - this.sipT) / 0.25);
+      c.applySip(this.sipT, Math.max(0, w));
+      if (this.sipT >= d) this.sipT = 0;
+    }
   }
 
   // Latest physics position (feet). Shared vector: read it, don't modify it.
@@ -158,12 +209,13 @@ export class Player {
     n.x = t.x + mv.x; n.y = riding ? rideY + CENTER : t.y + mv.y; n.z = t.z + mv.z;
     this.body.setNextKinematicTranslation(n);
 
-    // Pose (walk bob, crouch squash) advances with the simulation.
-    this.bob += dt * (this.hurrying ? 13 : 8) * (this.moving ? 1 : 0);
-    const targetScale = this.crouching ? 0.66 : 1;
-    this.inner.scale.y += (targetScale - this.inner.scale.y) * Math.min(1, dt * 12);
-    this.inner.position.y = this.moving ? Math.abs(Math.sin(this.bob)) * 0.05 : 0;
-    this.inner.rotation.x = this.hurrying ? -0.12 : 0;
+    // Placeholder pose (only used if the character models fail to load).
+    if (!this.char) {
+      this.bob += dt * (this.hurrying ? 13 : 8) * (this.moving ? 1 : 0);
+      const targetScale = this.crouching ? 0.66 : 1;
+      this.inner.scale.y += (targetScale - this.inner.scale.y) * Math.min(1, dt * 12);
+      this.inner.position.y = this.moving ? Math.abs(Math.sin(this.bob)) * 0.05 : 0;
+    }
   }
 
   // Place the visible model between the last two physics states (alpha 0..1).
@@ -180,5 +232,6 @@ export class Player {
     if (this.fade === alpha) return;
     this.fade = alpha;
     this.mats.forEach((m) => { m.opacity = alpha; m.depthWrite = alpha >= 1; });
+    this.char?.setFade(alpha);
   }
 }

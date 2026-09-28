@@ -93,24 +93,25 @@ export function buildLevel(b, state) {
   });
 
   // ---------- Stairwell (full height) ----------
-  // One straight flight: bottom at the north end (z=1, ground) rising south to the Floor 2
-  // landing (z=8–9), which ends right at the stair exit door.
+  // One straight flight: bottom at the north end (z=2.2, ground) rising south to the Floor 2
+  // landing (z=8–9), which ends right at the stair exit door. The open area at the foot of the
+  // stairs is the full 6 m width of the stairwell and 2.2 m deep.
   b.vwall(20, 0, 9, 0, 7);
   b.vwall(26, 0, 9, 0, 7, [[3, 4.6]]);          // ground: east door from the service corridor
   b.hwall(9, 20, 26, 0, 3.7, [[23.4, 25.6]]);    // ground: front door from the lobby (no badge)
-  b.vwall(23, 1.6, 9, 0, 3.7);                   // ground: side wall between walkway and stairs
-  const run = 7, rise = 4, len = Math.hypot(run, rise), th = Math.atan2(rise, run);
+  b.vwall(23, 2.8, 9, 0, 3.7);                   // ground: side wall between walkway and stairs
+  const z0 = 2.2, run = 8 - z0, rise = 4, len = Math.hypot(run, rise), th = Math.atan2(rise, run);
   const normal = new THREE.Vector3(0, Math.cos(th), -Math.sin(th));
-  const mid = new THREE.Vector3(21.5, rise / 2, 1 + run / 2).addScaledVector(normal, -0.1);
+  const mid = new THREE.Vector3(21.5, rise / 2, z0 + run / 2).addScaledVector(normal, -0.1);
   b.world.createCollider(
     R.ColliderDesc.cuboid(1.5, 0.1, len / 2 + 0.05)
       .setTranslation(mid.x, mid.y, mid.z)
       .setRotation({ x: Math.sin(-th / 2), y: 0, z: 0, w: Math.cos(-th / 2) }),
   );
-  const steps = 14;
+  const steps = 13;
   for (let i = 0; i < steps; i++) {
-    const z0 = 1 + i * (run / steps);
-    b.box(20.05, 0, z0, 22.95, (i + 0.7) * (rise / steps), z0 + run / steps, { color: C.stairs, collide: false });
+    const zs = z0 + i * (run / steps);
+    b.box(20.05, 0, zs, 22.95, (i + 0.7) * (rise / steps), zs + run / steps, { color: C.stairs, collide: false });
   }
   b.box(22.9, F2, 0, 23.1, F2 + 1.05, 8, { color: C.rail });   // railing along the stair opening
 
@@ -133,11 +134,9 @@ export function buildLevel(b, state) {
   });
   // Reception
   b.box(1, 0, 14.4, 6, 1.1, 15.2, { color: C.counter });
-  b.figure(3.5, 0, 13.7, 0x5b7fa6, Math.PI);
   // Café
   b.box(18, 0, 19.6, 24, 1.1, 20.4, { color: C.counter });
   b.box(22.4, 1.1, 19.75, 23.5, 1.65, 20.25, { color: 0x3b3f45 });
-  b.figure(21, 0, 21.4, 0x6e4b3a, 0);
   // Lobby furniture
   b.box(7.6, 0, 20.4, 8.4, 1.5, 21.2, { color: 0x6f9e6a });
   b.box(8.8, 0, 21.8, 9.6, 1.3, 22.6, { color: 0x6f9e6a });
@@ -215,7 +214,7 @@ export function buildLevel(b, state) {
       elevatorLobby: new THREE.Vector3(12, 0, 5.5),
       eastDoor: new THREE.Vector3(26.6, 0, 3.8),
       stairsFront: new THREE.Vector3(24.5, 0, 9.6),
-      rampBottom: new THREE.Vector3(21.5, 0, 0.5),
+      rampBottom: new THREE.Vector3(21.5, 0, 1.3),
       rampTop: new THREE.Vector3(21.5, F2, 8.5),
       stairExit: new THREE.Vector3(21.5, F2, 9.8),
       meetingDoor: new THREE.Vector3(10.4, F2, 21),

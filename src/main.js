@@ -5,12 +5,14 @@ import { Game } from './core/game.js';
 import { Builder } from './world/builder.js';
 import { buildLevel, F2 } from './world/level1.js';
 import { Player } from './actors/player.js';
+import { loadCharacterAssets, Character, OUTFITS, SKINS, HAIRS, KINDS } from './actors/character.js';
 import { FollowCamera } from './systems/camera.js';
 import { Hud } from './ui/hud.js';
 
 // Start downloading the physics engine right away, in parallel with everything else.
 // It is the largest file, lives in its own chunk, and stays cached between game updates.
 const rapierReady = import('@dimforge/rapier3d');
+const charactersReady = loadCharacterAssets('./models/').catch((err) => { console.error(err); return null; });
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;       // fixed simulation step
@@ -102,6 +104,38 @@ async function boot() {
   const player = new Player(scene, world, RAPIER, level.spawn, level.spawnYaw);
   const camCtl = new FollowCamera(camera, world, RAPIER);
 
+  // ---------- Characters: the two player choices plus the receptionist and barista ----------
+  const charAssets = await charactersReady;
+  const LOOK_KEY = 'coffee-quest-look';
+  let look = { kind: 0, outfit: 0, skin: 1, hair: 1 };
+  try { look = { ...look, ...JSON.parse(localStorage.getItem(LOOK_KEY) || '{}') }; } catch { /* private mode */ }
+  const choices = {};
+  const npcs = [];
+  if (charAssets) {
+    KINDS.forEach((k) => { choices[k] = new Character(charAssets, k); });
+    const npc = (kind, x, z, yaw, { outfit, skin, hair }) => {
+      const c = new Character(charAssets, kind);
+      c.setOutfit(outfit); c.setSkin(skin); c.setHair(hair);
+      const g = new THREE.Group();
+      g.position.set(x, 0, z);
+      g.rotation.y = yaw;
+      g.add(c.root);
+      scene.add(g);
+      npcs.push(c);
+      return c;
+    };
+    level.receptionist = npc('woman', 3.5, 13.7, Math.PI, { outfit: 4, skin: 2, hair: 0 });
+    level.barista = npc('man', 21, 21.4, 0, { outfit: 1, skin: 3, hair: 0 });
+  }
+  const applyLook = () => {
+    const c = choices[KINDS[look.kind]];
+    if (!c) return;
+    c.setOutfit(look.outfit); c.setSkin(look.skin); c.setHair(look.hair);
+    if (player.char !== c) player.setCharacter(c);
+    try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* ignore */ }
+  };
+  applyLook();
+
   const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xd6a27c }));
   marker.renderOrder = 10;
   scene.add(marker);
@@ -147,8 +181,59 @@ async function boot() {
     },
   });
 
+  // ---------- Character picker (start screen), keyboard only ----------
+  const ROWS = [
+    { key: 'kind', count: KINDS.length, render: (i, on) => `<span class="chipopt${on ? ' on' : ''}">${KINDS[i] === 'woman' ? 'Woman' : 'Man'}</span>` },
+    { key: 'outfit', count: OUTFITS.length, swatch: (i) => `#${OUTFITS[i].color.toString(16).padStart(6, '0')}`, name: (i) => OUTFITS[i].name },
+    { key: 'skin', count: SKINS.length, swatch: (i) => skinSwatch(i), name: (i) => SKINS[i].name },
+    { key: 'hair', count: HAIRS.length, swatch: (i) => `#${HAIRS[i].color.toString(16).padStart(6, '0')}`, name: (i) => HAIRS[i].name },
+  ];
+  function skinSwatch(i) {
+    const base = [0.78, 0.58, 0.45];
+    const c = base.map((v, k) => Math.min(255, Math.round(255 * v * SKINS[i].tint[k])));
+    return `rgb(${c.join(',')})`;
+  }
+  let activeRow = 0;
+  const renderPicker = () => {
+    ROWS.forEach((row, r) => {
+      const el = $(`opt-${row.key}`);
+      const v = look[row.key];
+      el.innerHTML = row.render
+        ? Array.from({ length: row.count }, (_, i) => row.render(i, i === v)).join('')
+        : Array.from({ length: row.count }, (_, i) => `<span class="sw${i === v ? ' on' : ''}" style="background:${row.swatch(i)}"></span>`).join('') + `<span class="sw-name">${row.name(v)}</span>`;
+      el.parentElement.classList.toggle('active', r === activeRow);
+    });
+  };
+  if (charAssets) renderPicker(); else $('picker').hidden = true;
+  const pickerKey = (code) => {
+    if (!charAssets) return;
+    if (code === 'ArrowUp' || code === 'KeyW') activeRow = (activeRow + ROWS.length - 1) % ROWS.length;
+    else if (code === 'ArrowDown' || code === 'KeyS') activeRow = (activeRow + 1) % ROWS.length;
+    else if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(code)) {
+      const row = ROWS[activeRow];
+      const d = code === 'ArrowLeft' || code === 'KeyA' ? -1 : 1;
+      look[row.key] = (look[row.key] + d + row.count) % row.count;
+      applyLook();
+    } else return;
+    renderPicker();
+  };
+  // Start screen: the chosen commuter stands in the lobby facing the camera, framed to the
+  // right of the picker; the lobby is the backdrop.
+  const STAGE = new THREE.Vector3(level.spawn.x, 0, level.spawn.z - 3);
+  player.teleport(STAGE, Math.PI);
+  const selectCam = () => {
+    const p = STAGE;
+    camera.position.set(p.x - 0.35, 1.45, p.z + 3.1);
+    camera.lookAt(p.x - 0.1, 1.0, p.z);
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w > 720) camera.setViewOffset(w, h, -w * 0.2, 0, w, h); else camera.clearViewOffset();
+  };
+
   const startGame = () => {
     sfx.unlock();
+    camera.clearViewOffset();
+    if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
+    camCtl.snap();
     if (mode === 'end' || mode === 'paused') game.reset();
     input.endFrame();                 // drop any keys pressed while a menu was open
     mode = 'playing';
@@ -170,6 +255,7 @@ async function boot() {
     if (e.repeat || !ready) return;
     const enter = e.code === 'Enter' || e.code === 'NumpadEnter';
     if (mode === 'start' && enter && !needsKeyboardNotice()) startGame();
+    else if (mode === 'start') pickerKey(e.code);
     else if (mode === 'end' && enter) startGame();
     else if (mode === 'playing' && (e.code === 'Escape' || e.code === 'KeyP')) pause();
     else if (mode === 'paused') {
@@ -195,11 +281,15 @@ async function boot() {
   // ---------- Warm-up: compile every shader and upload every texture before play ----------
   placeSun(0, level.spawn.x, level.spawn.z);
   camCtl.update(0, player);
+  // Put the other commuter on stage for a moment so every character shader is compiled now.
+  const spare = KINDS.map((k) => choices[k]).find((c) => c && c !== player.char);
+  if (spare) { spare.root.position.set(level.spawn.x + 1.5, 0, level.spawn.z - 2); scene.add(spare.root); }
   builder.textures.forEach((t) => renderer.initTexture(t));
   const tBuilt = performance.now();
   await renderer.compileAsync(scene, camera);
   const tCompiled = performance.now();
   renderer.render(scene, camera);             // also builds the shadow-map shaders
+  if (spare) { scene.remove(spare.root); spare.root.position.set(0, 0, 0); }
   if (DEBUG) console.log(`[boot] rapier ${Math.round(tRapier - tBoot)} ms, build ${Math.round(tBuilt - tRapier)} ms, compile ${Math.round(tCompiled - tBuilt)} ms, first frame ${Math.round(performance.now() - tCompiled)} ms, since page start ${Math.round(performance.now())} ms`);
   ready = true;
   $('loading').hidden = true;
@@ -229,16 +319,30 @@ async function boot() {
       if (steps === MAX_STEPS) acc = 0;      // fell far behind (tab hiccup): don't spiral
       player.interpolate(acc / STEP);
       level.elevator.interpolate(acc / STEP);
+      animateCharacters(dt);
       camCtl.update(dt, player);
       placeSun(player.floor, player.renderPos.x, player.renderPos.z);
       if (mode === 'playing') game.updateHud(dt);
       renderer.render(scene, camera);
       adaptQuality(raw);
+    } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
+      // Menus with a living character behind them keep animating.
+      animateCharacters(dt);
+      if (mode === 'start') selectCam(); else camCtl.update(dt, player);
+      renderer.render(scene, camera);
     } else if (dirty && !noticeOnly) {
       camCtl.update(dt, player);
       renderer.render(scene, camera);
       dirty = false;
     }
+  }
+
+  function animateCharacters(dt) {
+    player.animate(dt);
+    const label = game.busy?.label || '';
+    level.receptionist?.play(label.includes('reception') ? 'talk' : 'idle');
+    level.barista?.play(label.includes('line') ? 'talk' : 'idle');
+    for (const c of npcs) c.update(dt);
   }
 
   function adaptQuality(raw) {

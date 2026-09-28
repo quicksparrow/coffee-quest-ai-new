@@ -5,8 +5,8 @@ const GAME_SECONDS_PER_REAL = 480 / ROUND_SECONDS;
 const START_MIN = 8 * 60 + 52;
 
 const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
-const SMOKE_EVERY = 25;     // the stair exit opens this often (seconds)…
-const SMOKE_OPEN = 6;       // …and stays open this long
+const SMOKE_WAIT = 3;       // wait at the stair exit this long before someone opens it (seconds)…
+const SMOKE_OPEN = 5;       // …and it stays open this long
 const ACTION_BUFFER = 0.15; // a Space press is remembered briefly, so pressing a hair early still counts
 
 const HINTS = {
@@ -15,7 +15,7 @@ const HINTS = {
   visitor: 'Visitor pass works on the turnstiles and the elevators. Not on the doors upstairs, though.',
   coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost.',
   spill: 'Careful! Hurrying spills your coffee.',
-  stairdoor: 'That door needs a badge. Someone steps out for a smoke every half minute or so. Wait right by it and walk in after them.',
+  stairdoor: "That door needs a badge. Someone's about to step out for a smoke. Wait right by it and walk in after them.",
   elevator: 'Just step in and wait, it goes on its own. Or press Space to leave right away.',
   floor2: "You're up! 2B is in the far corner, right across the open office.",
   nocoffee: "You can't walk in empty-handed. Coffee first!",
@@ -49,7 +49,8 @@ export class Game {
     s.smokerOpen = false;
     s.coffee = { obtained: false, latte: false, espresso: false, sips: 0, count: 0 };
     this.elapsed = 0;
-    this.smokerT = 0;
+    this.smokeIn = SMOKE_WAIT;
+    this.smokeOpenT = 0;
     this.busy = null;
     this.actionBuffer = 0;
     this.sipCooldown = 0;
@@ -64,6 +65,9 @@ export class Game {
     this.over = false;
     this.lastFloor = 0;
     this.player.crouching = false;
+    this.player.cup.visible = false;
+    this.player.idleStyle = null;
+    this.player.sipT = 0;
     this.level.elevator.reset();
     this.player.teleport(this.level.spawn, this.level.spawnYaw);
     this.camCtl.snap();
@@ -85,14 +89,14 @@ export class Game {
         if (el.busy) return { text: el.target === floor ? 'Elevator on its way…' : 'Elevator is busy…', key: null };
         return { text: 'Call elevator' };
       },
-      use: () => { el.call(floor); this.sfx.beep(); },
+      use: () => { el.call(floor); this.sfx.beep(); this.player.playOnce('interact'); },
     });
     return [
       {
         pos: P.reception, radius: 1.8, floor: 0,
         enabled: () => !s.hasBadge,
         label: () => ({ text: 'Ask for a visitor pass' }),
-        use: () => this.startBusy('Waiting at reception…', 5, () => {
+        use: () => this.startBusy('Waiting at reception…', 5, 'talk', () => {
           s.hasBadge = true;
           this.score('Visitor pass', 150);
           this.sfx.beep();
@@ -103,13 +107,13 @@ export class Game {
         pos: P.cafe, radius: 2, floor: 0,
         enabled: () => !s.coffee.latte,
         label: () => ({ text: 'Get in line for a latte' }),
-        use: () => this.startBusy('Waiting in line…', 6, () => this.gotCoffee('latte')),
+        use: () => this.startBusy('Waiting in line…', 6, 'phone', () => this.gotCoffee('latte')),
       },
       {
         pos: P.espresso, radius: 1.7, floor: 1,
         enabled: () => !s.coffee.espresso,
         label: () => ({ text: 'Pull an espresso shot' }),
-        use: () => this.startBusy('Pulling a shot…', 2.5, () => this.gotCoffee('espresso')),
+        use: () => this.startBusy('Pulling a shot…', 2.5, null, () => this.gotCoffee('espresso')),
       },
       call(0, P.callG),
       call(1, P.callF2),
@@ -144,10 +148,16 @@ export class Game {
     return best;
   }
 
-  startBusy(label, duration, onDone) { this.busy = { label, duration, t: 0, onDone }; }
+  // A short wait (in line, at the counter). `pose` is the idle animation while waiting.
+  startBusy(label, duration, pose, onDone) {
+    this.busy = { label, duration, t: 0, onDone };
+    this.player.playOnce('interact');
+    this.player.idleStyle = pose;
+  }
 
   gotCoffee(kind) {
     const c = this.state.coffee;
+    this.player.cup.visible = true;
     c[kind] = true;
     c.count += 1;
     c.sips = kind === 'latte' ? 3 : Math.min(3, c.sips + 1);
@@ -169,6 +179,7 @@ export class Game {
     this.boost = 8;
     this.score('Sips', 150, true);
     this.sfx.sip();
+    this.player.sip();
   }
 
   score(label, pts, merge = false) {
@@ -251,11 +262,12 @@ export class Game {
     if (this.busy) {
       if (input.forward || input.aboutFace) {
         this.busy = null;
+        this.player.idleStyle = null;
         this.hud.pop('Cancelled', 'bad');
       } else {
         canMove = false;
         this.busy.t += dt;
-        if (this.busy.t >= this.busy.duration) { const done = this.busy.onDone; this.busy = null; done(); }
+        if (this.busy.t >= this.busy.duration) { const done = this.busy.onDone; this.busy = null; this.player.idleStyle = null; this.player.playOnce('interact'); done(); }
       }
     }
 
@@ -287,13 +299,22 @@ export class Game {
       else if (s.coffee.sips > 0 && input.action) { this.sip(); this.actionBuffer = 0; }
     }
 
-    // Doors and the smoker cycle on the stair exit
-    this.smokerT += dt;
-    const cyc = this.smokerT % SMOKE_EVERY;
-    const wasOpen = s.smokerOpen;
-    s.smokerOpen = cyc > SMOKE_EVERY - SMOKE_OPEN;
-    this.smokeIn = s.smokerOpen ? 0 : SMOKE_EVERY - SMOKE_OPEN - cyc;
-    if (s.smokerOpen && !wasOpen && this.level.zones.stairDoorInside(p)) this.hud.pop("Door's open, go!", 'good');
+    // Stair exit: wait by it for a few seconds and someone steps out, holding it open.
+    if (s.smokerOpen) {
+      this.smokeOpenT -= dt;
+      if (this.smokeOpenT <= 0) { s.smokerOpen = false; this.smokeIn = SMOKE_WAIT; }
+    } else if (this.level.zones.stairDoorInside(p)) {
+      if (!this.player.moving) this.player.idleStyle = 'arms';
+      this.smokeIn -= dt;
+      if (this.smokeIn <= 0) {
+        s.smokerOpen = true;
+        this.smokeOpenT = SMOKE_OPEN;
+        this.hud.pop("Door's open, go!", 'good');
+      }
+    } else {
+      this.smokeIn = SMOKE_WAIT;
+    }
+    if (this.player.idleStyle === 'arms' && (s.smokerOpen || !this.level.zones.stairDoorInside(p))) this.player.idleStyle = null;
     const pp = this.player.position;
     this._doorProbe.set(pp.x, pp.y + 0.85, pp.z);
     for (const d of this.level.doors) d.update(dt, this._doorProbe);
@@ -376,8 +397,8 @@ export class Game {
       const text = el.moving ? (el.target === 1 ? 'Going up to Floor 2…' : 'Going down to the Lobby…') : 'Doors closing…';
       this.hud.setPrompt(text, { key: null, progress: el.progress ?? 0 });
     } else if (Z.stairDoorInside(p) && this.level.stairDoor.open < 0.5) {
-      const n = Math.ceil(this.smokeIn || 0);
-      this.hud.setPrompt(`Badge door · someone comes through in ${n} s`, { key: null, progress: 1 - (this.smokeIn || 0) / (SMOKE_EVERY - SMOKE_OPEN) });
+      const n = Math.max(1, Math.ceil(this.smokeIn));
+      this.hud.setPrompt(`Badge door · someone comes through in ${n} s`, { key: null, progress: 1 - this.smokeIn / SMOKE_WAIT });
     } else if (near) {
       const l = near.label();
       this.hud.setPrompt(l.text, { key: l.key === null ? null : 'Space' });
@@ -397,6 +418,8 @@ export class Game {
 
   finish() {
     this.over = true;
+    this.player.idleStyle = 'cheer';
+    this.player.moving = false;
     const s = this.state;
     const late = Math.max(0, this.elapsed - ROUND_SECONDS);
     const left = Math.max(0, ROUND_SECONDS - this.elapsed);

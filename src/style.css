@@ -150,3 +150,29 @@ h2 { margin: 0; font: 600 44px/1 var(--display); text-transform: uppercase; }
   * { animation: none !important; transition: none !important; }
 }
 canvas#game:focus { outline: none; }
+
+/* ---------- Start screen: character picker on the left, the 3D character on the right ---------- */
+.screen.start {
+  place-items: center start;
+  padding-left: clamp(20px, 6vw, 90px);
+  background: linear-gradient(90deg, rgba(13,17,22,.92) 0%, rgba(13,17,22,.82) 38%, rgba(13,17,22,.15) 62%, rgba(13,17,22,0) 100%);
+  backdrop-filter: none;
+}
+.screen.start .card { width: min(470px, 100%); }
+.screen.start h1 { font-size: clamp(52px, 7vw, 84px); }
+.picker { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; border: 1px solid transparent; }
+.row.active { background: rgba(255,255,255,.07); border-color: rgba(214,162,124,.55); }
+.row-label { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.row.active .row-label { color: var(--espresso); }
+.opts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chipopt { font: 600 18px var(--display); letter-spacing: .04em; text-transform: uppercase; padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); color: #cfd6df; }
+.chipopt.on { background: var(--espresso); border-color: var(--espresso); color: #1b140f; }
+.sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); }
+.sw.on { border-color: #fff; box-shadow: 0 0 0 3px rgba(214,162,124,.8); }
+.sw-name { font-size: 13px; color: #d4dae2; margin-left: 4px; min-width: 60px; }
+.picker-hint { margin: 2px 0 0 10px; font-size: 12.5px; color: var(--muted); }
+.picker-hint kbd { font-size: 11px; padding: 3px 5px; }
+.controls summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.controls .keys { margin-top: 10px; }
+@media (max-width: 720px) { .screen.start { place-items: center; padding-left: 20px; background: rgba(13,17,22,.9); } }

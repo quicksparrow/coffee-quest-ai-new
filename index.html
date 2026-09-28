@@ -56,26 +56,35 @@
   <div id="fade"></div>
 
   <!-- Start screen -->
-  <section id="start" class="screen">
+  <section id="start" class="screen start">
     <div class="card">
       <p class="eyebrow">Level 1 · Badge? What Badge?</p>
       <h1>Coffee Quest</h1>
       <p class="lede">It's 8:52. Your call starts at 9:00 in Meeting 2B, you forgot your badge, and you are not joining without coffee.</p>
       <div id="start-ready">
-        <div class="keys">
-          <div><kbd>↑</kbd> or <kbd>W</kbd><span>Walk forward</span></div>
-          <div><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd><span>Turn</span></div>
-          <div><kbd>↓</kbd> or <kbd>S</kbd><span>Turn around</span></div>
-          <div><kbd>Shift</kbd><span>Hurry</span></div>
-          <div><kbd>C</kbd><span>Crouch</span></div>
-          <div><kbd>X</kbd><span>X-ray view (hold)</span></div>
-          <div><kbd>Space</kbd><span>Do the thing · sip coffee</span></div>
-          <div><kbd>P</kbd> or <kbd>Esc</kbd><span>Pause</span></div>
+        <div class="picker" id="picker" aria-label="Choose your commuter">
+          <div class="row" data-row="kind"><span class="row-label">Commuter</span><div class="opts" id="opt-kind"></div></div>
+          <div class="row" data-row="outfit"><span class="row-label">Top</span><div class="opts" id="opt-outfit"></div></div>
+          <div class="row" data-row="skin"><span class="row-label">Skin tone</span><div class="opts" id="opt-skin"></div></div>
+          <div class="row" data-row="hair"><span class="row-label">Hair</span><div class="opts" id="opt-hair"></div></div>
+          <p class="picker-hint"><kbd>↑</kbd><kbd>↓</kbd> pick a row &nbsp; <kbd>←</kbd><kbd>→</kbd> change</p>
         </div>
         <p class="press" id="press-start" hidden>Press <kbd>Enter</kbd> to start</p>
         <p class="small focus-tip" id="focus-tip" hidden>Keys not responding? Click the game once so it can hear your keyboard.</p>
+        <details class="controls">
+          <summary>Controls</summary>
+          <div class="keys">
+            <div><kbd>↑</kbd> or <kbd>W</kbd><span>Walk forward</span></div>
+            <div><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd><span>Turn</span></div>
+            <div><kbd>↓</kbd> or <kbd>S</kbd><span>Turn around</span></div>
+            <div><kbd>Shift</kbd><span>Hurry</span></div>
+            <div><kbd>C</kbd><span>Crouch</span></div>
+            <div><kbd>X</kbd><span>X-ray view (hold)</span></div>
+            <div><kbd>Space</kbd><span>Do the thing · sip coffee</span></div>
+            <div><kbd>P</kbd> or <kbd>Esc</kbd><span>Pause</span></div>
+          </div>
+        </details>
         <p class="small">Keyboard only. Headphones recommended.</p>
-        <p class="small build">Graybox build: blocks instead of art, coworkers arrive in the next build.</p>
       </div>
       <div id="start-notice" hidden>
         <p class="notice"><b>Coffee Quest is played with a keyboard.</b> Open this page on a laptop or desktop computer to play. Phone and tablet controls are on the way.</p>

@@ -14,7 +14,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,
-    chunkSizeWarningLimit: 600, // three.js is ~540 kB minified; that's expected
+    chunkSizeWarningLimit: 700, // three.js + loaders is ~640 kB minified; that is expected
     rolldownOptions: {
       output: {
         // Keep three.js in its own long-lived file so game updates don't re-download it.
