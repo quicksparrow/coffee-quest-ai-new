@@ -37,13 +37,17 @@ const CUT = {
   woman: { shoeTop: 0.085, hem: 0.16, waist: 0.99, neck: 1.46, neckFront: 1.37, neckSlope: -6.5, armX: 0.17, sleeveX: 0.5, tie: 0, bottom: 0x2c3550 },
 };
 
+// The playable preview link can't serve .glb files, so its build ships the same models as
+// self-contained .json glTF (VITE_MODEL_EXT=json). Regular builds use .glb.
+const EXT = import.meta.env.VITE_MODEL_EXT || 'glb';
+
 export async function loadCharacterAssets(base = './models/') {
   const loader = new GLTFLoader();
   const [woman, man, a1, a2] = await Promise.all([
-    loader.loadAsync(`${base}woman.glb`),
-    loader.loadAsync(`${base}man.glb`),
-    loader.loadAsync(`${base}anims-1.glb`),
-    loader.loadAsync(`${base}anims-2.glb`),
+    loader.loadAsync(`${base}woman.${EXT}`),
+    loader.loadAsync(`${base}man.${EXT}`),
+    loader.loadAsync(`${base}anims-1.${EXT}`),
+    loader.loadAsync(`${base}anims-2.${EXT}`),
   ]);
   const clips = {};
   [...a1.animations, ...a2.animations].forEach((c) => { clips[c.name] = c; });
