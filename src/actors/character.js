@@ -179,6 +179,9 @@ const LOOP = { idle: 'Idle_Loop', walk: 'Walk_Loop', jog: 'Jog_Fwd_Loop', hurry:
 // Natural ground speed of each locomotion clip at timeScale 1 (m/s), measured from the clips'
 // foot travel, so playback speed can match movement speed and feet don't slide.
 export const CLIP_SPEED = { walk: 1.25, jog: 4.2, hurry: 6.5, crouchWalk: 0.8 };
+// Sip timing (seconds) and where the lips are relative to the Head bone (metres, per body).
+const SIP = { up: 0.38, hold: 0.62, down: 0.42, woman: { mouthUp: 0.06, mouthFwd: 0.1 }, man: { mouthUp: 0.06, mouthFwd: 0.11 } };
+export const SIP_SECONDS = SIP.up + SIP.hold + SIP.down;
 const SIP_BONES = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_.*l$|^(neck_01|Head)$/;
 
 export class Character {
@@ -245,33 +248,109 @@ export class Character {
     this.currentKey = key;
   }
 
-  // The drink animation raises the left hand to the mouth. We keep its left-arm, neck and head
-  // tracks and blend them over whatever the legs are doing, so you can sip while walking.
+  // Sipping. The pack's drink clip lifts the hand to the side of the face, not the mouth, so we
+  // only borrow its finger grip and head tilt, and place the arm with two-bone IK: the cup rises
+  // on a small forward arc, the lid meets the lips, and the cup tips back while you drink.
+  // Works over any leg animation, so you can sip while walking.
   setupSip(clip) {
     this.sipTracks = [];
-    this.sipDuration = clip.duration;
+    this.sipClip = clip.duration;
     for (const track of clip.tracks) {
       const [name, prop] = track.name.split('.');
       if (prop !== 'quaternion' || !SIP_BONES.test(name) || !this.bones[name]) continue;
-      this.sipTracks.push({ bone: this.bones[name], interp: track.createInterpolant(), q: new THREE.Quaternion() });
+      this.sipTracks.push({ bone: this.bones[name], arm: /^(upperarm|lowerarm|hand)_l$/.test(name), finger: /^(index|middle|ring|pinky|thumb)_/.test(name), interp: track.createInterpolant(), q: new THREE.Quaternion() });
     }
+    const b = this.bones;
+    this.ik = { upper: b.upperarm_l, lower: b.lowerarm_l, hand: b.hand_l, v: Array.from({ length: 10 }, () => new THREE.Vector3()), q: Array.from({ length: 4 }, () => new THREE.Quaternion()), m: [new THREE.Matrix4(), new THREE.Matrix4()] };
   }
 
-  // t: seconds into the sip; weight 0..1.
-  applySip(t, weight) {
-    if (weight <= 0) return;
+  // Consume-clip pose for the borrowed bones (fingers, neck, head; arm too when `withArm`).
+  applySipPose(t, weight, withArm = false) {
     for (const s of this.sipTracks) {
-      const v = s.interp.evaluate(Math.min(t, this.sipDuration - 1e-3));
+      if (s.arm && !withArm) continue;
+      // Fingers keep the grip the cup was fitted to (the clip's first frame).
+      const v = s.interp.evaluate(s.finger ? 0 : Math.min(t, this.sipClip - 1e-3));
       s.q.set(v[0], v[1], v[2], v[3]);
       s.bone.quaternion.slerp(s.q, weight);
     }
+  }
+
+  // t: seconds into the sip. Returns false once the sip is over.
+  applySip(t, cup) {
+    const D = SIP.up + SIP.hold + SIP.down;
+    if (t >= D) return false;
+    const ease = (x) => x * x * (3 - 2 * x);
+    const lift = t < SIP.up ? ease(t / SIP.up) : t < SIP.up + SIP.hold ? 1 : ease(1 - (t - SIP.up - SIP.hold) / SIP.down);
+    const drink = t < SIP.up ? 0 : Math.min(1, (t - SIP.up) / SIP.hold);      // how far the cup tips back
+    // Borrow the clip's grip and head tilt from its "at the mouth" moment.
+    this.applySipPose(0.3 + 0.2 * lift, lift);
+    if (!cup) return true;
+    const { upper, lower, hand, v, q, m } = this.ik;
+    this.root.updateMatrixWorld(true);
+    const [fwd, up, left, mouth, from, to, cupPos] = v;
+    this.root.getWorldQuaternion(q[0]);
+    fwd.set(0, 0, 1).applyQuaternion(q[0]);
+    up.set(0, 1, 0).applyQuaternion(q[0]);
+    left.set(1, 0, 0).applyQuaternion(q[0]);
+    const k = SIP[this.kind];
+    this.head.getWorldPosition(mouth).addScaledVector(up, k.mouthUp).addScaledVector(fwd, k.mouthFwd);
+    // Where the cup is now (arm swinging with the walk) -> just below the lips, on a forward arc.
+    cup.getWorldPosition(from);
+    const tilt = THREE.MathUtils.degToRad(12 + 38 * drink);
+    const cupUp = v[7].copy(up).multiplyScalar(Math.cos(tilt)).addScaledVector(fwd, -Math.sin(tilt));
+    to.copy(mouth).addScaledVector(cupUp, -0.075).addScaledVector(fwd, 0.035).addScaledVector(left, 0.015);
+    cupPos.lerpVectors(from, to, lift).addScaledVector(fwd, 0.12 * Math.sin(Math.PI * lift) * (1 - drink));
+    // Cup orientation: facing the character's way, then tipped back toward the face.
+    const upright = q[1].copy(q[0]);
+    const tip = q[2].setFromAxisAngle(left, -tilt);
+    const cupWant = tip.multiply(upright);
+    cup.getWorldQuaternion(q[3]).slerp(cupWant, lift);
+    // Hand transform that puts the cup there (cup = hand * cupLocal).
+    const cupScale = cup.getWorldScale(v[8]);
+    m[0].compose(cupPos, q[3], cupScale).multiply(m[1].copy(cup.matrix).invert());
+    const wrist = v[9].setFromMatrixPosition(m[0]);
+    const handQ = q[3].setFromRotationMatrix(m[1].extractRotation(m[0]));
+    this.solveArm(wrist, handQ);
+    return true;
+  }
+
+  // Two-bone IK for the left arm: shoulder -> elbow -> wrist, elbow pointing down and out.
+  solveArm(target, handQ) {
+    const { upper, lower, hand } = this.ik;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    upper.getWorldPosition(a); lower.getWorldPosition(b); hand.getWorldPosition(c);
+    const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
+    const toT = target.clone().sub(a);
+    const d = THREE.MathUtils.clamp(toT.length(), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3);
+    const dir = toT.normalize();
+    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const pole = new THREE.Vector3(0.9, -1, -0.35).applyQuaternion(rq);   // out to the left, down, a bit back
+    pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+    const cosA = THREE.MathUtils.clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
+    const elbow = a.clone().addScaledVector(dir, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));
+    const wristAt = a.clone().addScaledVector(dir, d);
+    const aim = (bone, from, childNow, childWant) => {
+      const cur = childNow.clone().sub(from).normalize();
+      const want = childWant.clone().sub(from).normalize();
+      const delta = new THREE.Quaternion().setFromUnitVectors(cur, want);
+      const world = bone.getWorldQuaternion(new THREE.Quaternion()).premultiply(delta);
+      const parent = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      bone.quaternion.copy(parent.invert().multiply(world));
+      bone.updateMatrixWorld(true);
+    };
+    aim(upper, a, b, elbow);
+    lower.getWorldPosition(b); hand.getWorldPosition(c);
+    aim(lower, b, c, wristAt);
+    const parent = lower.getWorldQuaternion(new THREE.Quaternion());
+    hand.quaternion.copy(parent.invert().multiply(handQ));
+    hand.updateMatrixWorld(true);
   }
 
   // Put a held object (the coffee cup) in the left hand, upright when the arm hangs at rest.
   attachToLeftHand(obj) {
     const hand = this.bones.hand_l, mid = this.bones.middle_01_l, thumb = this.bones.thumb_01_l;
     this.mixer.stopAllAction();
-    this.applySip(0, 1);
+    this.applySipPose(0, 1, true);
     this.root.updateMatrixWorld(true);
     const h = hand.getWorldPosition(new THREE.Vector3());
     const m = mid.getWorldPosition(new THREE.Vector3());

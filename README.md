@@ -28,8 +28,8 @@ The start screen lets you play as **Claire** or **Steven** (← → to switch, E
 | ↓ or S | Turn around |
 | Shift (hold) | Sprint (spills coffee) |
 | C | Crouch on / off |
-| X (hold) | X-ray view |
-| Space | Do the thing in front of you, or sip coffee |
+| X (hold) | X-ray view: coworkers, where they're looking, their routes, coffee, hiding spots and the way up |
+| Space | Do the thing in front of you (get coffee, call the elevator, hide, step out, excuse yourself from a chat), or sip coffee |
 | P or Esc | Pause (resume with P, Esc, Enter, Space or a click): restart, hints on / off, sound |
 
 ## Level 1: "Badge? What Badge?"
@@ -41,6 +41,15 @@ Get a coffee, then walk into Meeting 2B on Floor 2. Arriving after 09:00 is allo
 - The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
 - The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
 - Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it.
+
+## Coworkers
+
+Six chatty coworkers walk their routes: Pat (Accounting) and Tom (Sales) in the lobby, and Priya (IT), Dave (the Storyteller), Monica (the "quick question" manager) and Josh (the intern) upstairs. Each looks where they're walking. While you're inside someone's cone of sight and in plain view, a meter over their head fills: faster up close or when you sprint, slower when you crouch or wait in a line. When it fills they call out and come over; walk into them, or let them catch up, and you're stuck chatting (it costs time and 300 points; tap Space to excuse yourself sooner).
+
+- Walls, closed doors and, when you crouch, the cubicle partitions block their view.
+- Break line of sight and most people give up. Hiding always works (+100): the two phone pods, the supply closet and the lobby plants. Josh the intern won't give up until you hide.
+- Rita steps out through the Floor 2 stair door for a smoke and holds it open for you.
+- Hold X to see everyone through the walls, with their sight cones and routes, plus every place you can do something on your floor.
 
 ## Deploy (Vercel or Netlify)
 
@@ -59,8 +68,8 @@ src/core/rapier-wasm.js loads the physics engine's WebAssembly as a streamed .wa
 src/core/               keyboard input, sound
 src/world/              level layout, doors and turnstiles, graybox building helpers
 src/actors/             the player and the animated characters
-src/systems/            follow camera
-src/ui/                 HUD updates
+src/systems/            follow camera, coworkers and stealth, walkable grid and paths, X-ray beacons
+src/ui/                 HUD updates, name tags, speech bubbles and meters
 ```
 
 ## Performance notes
@@ -75,10 +84,10 @@ src/ui/                 HUD updates
 
 ## Characters
 
-Claire, Steven and the lobby staff use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping coffee blends the drink animation onto the arm while you keep walking.
+Claire, Steven, the lobby staff and the coworkers use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping lifts the cup to the lips with two-bone arm IK (the pack's drink clip only reaches the side of the face), so you can sip while walking.
 
 `public/models/` holds the web-ready files. The game downloads them with a plain request and decodes their textures directly from the file, so it doesn't depend on `blob:` or `data:` addresses that strict hosts block; if they ever fail to load, the start screen says why and you play as a stand-in. For hosts that can't serve `.glb` files at all, `VITE_MODELS=embed npm run build` bakes the models into the JavaScript instead. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
 
 ## Status
 
-Stage 2 of the plan: character select and animated characters, on the graybox level. Next: coworkers with patrols, sight cones, conversations and hiding spots.
+Stage 3 of the plan: coworkers with patrols, sight cones, conversations and hiding spots, on the graybox level. Next: objectives and scoring (tailgating through badge doors, the kitchen back door into 2B, the manager's walk to the call).

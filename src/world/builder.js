@@ -43,6 +43,7 @@ export class Builder {
     this.xrayMats = new Set();   // materials that fade in x-ray view
     this.batches = new Map();    // key → { material, cast, receive, geometries: [] }
     this.textures = [];          // label textures, uploaded to the GPU up front
+    this.seeThrough = new Set(); // glass colliders: they stop you, but not a look or the camera
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._v = new THREE.Vector3();
@@ -84,6 +85,7 @@ export class Builder {
       collider = this.world.createCollider(
         this.R.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2).setTranslation(cx, cy, cz),
       );
+      if (opacity < 1) this.seeThrough.add(collider.handle);
     }
     return { collider };
   }

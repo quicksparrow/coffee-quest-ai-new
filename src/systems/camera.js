@@ -5,9 +5,12 @@ import * as THREE from 'three';
  * Runs once per rendered frame on the interpolated player pose, with no per-frame allocations.
  */
 export class FollowCamera {
-  constructor(camera, world, R) {
+  constructor(camera, world, R, { seeThrough = new Set(), groups } = {}) {
     this.camera = camera;
     this.world = world;
+    // Look through glass and past coworkers; only walls, floors and ceilings pull the camera in.
+    this.groups = groups;
+    this.skipGlass = (c) => !seeThrough.has(c.handle);
     this.yaw = 0;
     this.pos = new THREE.Vector3();
     this.look = new THREE.Vector3();
@@ -48,7 +51,7 @@ export class FollowCamera {
     const r = this.ray;
     r.origin.x = head.x; r.origin.y = head.y; r.origin.z = head.z;
     r.dir.x = dir.x; r.dir.y = dir.y; r.dir.z = dir.z;
-    const hit = this.world.castRay(r, dist, true, undefined, undefined, player.collider);
+    const hit = this.world.castRay(r, dist, true, undefined, this.groups, player.collider, undefined, this.skipGlass);
     const d = hit ? Math.max(0.35, hit.timeOfImpact - 0.25) : dist;
     const target = this._target.copy(head).addScaledVector(dir, d);
 

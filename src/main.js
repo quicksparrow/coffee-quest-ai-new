@@ -8,6 +8,9 @@ import { Player } from './actors/player.js';
 import { loadCharacterAssets, Character, KINDS, NAMES, randomLook } from './actors/character.js';
 import { FollowCamera } from './systems/camera.js';
 import { Hud } from './ui/hud.js';
+import { nameTag } from './ui/sprites.js';
+import { Stealth, RAY_GROUPS } from './systems/stealth.js';
+import { Beacons } from './systems/beacons.js';
 
 // Start downloading the physics engine right away, in parallel with everything else.
 // It is the largest file, lives in its own chunk, and stays cached between game updates.
@@ -40,28 +43,6 @@ window.addEventListener('focus', refreshFocusTip);
 window.addEventListener('blur', refreshFocusTip);
 
 // Floating name tag for the lobby staff (a sprite that always faces the camera).
-function nameTag(name, role) {
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 160;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = 'rgba(20,26,35,0.82)';
-  ctx.beginPath(); ctx.roundRect(8, 16, 496, 128, 40); ctx.fill();
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#eef1f5';
-  ctx.font = '600 56px "IBM Plex Sans", Arial, sans-serif';
-  ctx.fillText(name, 256, 80);
-  ctx.fillStyle = '#d6a27c';
-  ctx.font = '500 34px "IBM Plex Mono", monospace';
-  ctx.fillText(role.toUpperCase(), 256, 124);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  // Constant size on screen (about 5% of its height) so it reads from across the lobby.
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, sizeAttenuation: false }));
-  s.scale.set(0.19, 0.06, 1);
-  s.renderOrder = 5;
-  return s;
-}
-
 async function boot() {
   // ---------- Renderer, scene, lights ----------
   const canvas = $('game');
@@ -126,7 +107,8 @@ async function boot() {
   builder.finalize();
 
   const player = new Player(scene, world, RAPIER, level.spawn, level.spawnYaw);
-  const camCtl = new FollowCamera(camera, world, RAPIER);
+  level.seeThrough = builder.seeThrough;
+  const camCtl = new FollowCamera(camera, world, RAPIER, { seeThrough: builder.seeThrough, groups: RAY_GROUPS });
 
   // ---------- Characters: Claire or Steven, plus the receptionist and barista ----------
   let charAssets = await charactersReady;
@@ -173,6 +155,15 @@ async function boot() {
   const shuffleLook = () => { look = { ...look, ...randomLook() }; applyLook(); };
   applyLook();
 
+  // Coworkers with patrols, sight and conversations (see systems/stealth.js).
+  let stealth = null;
+  try {
+    stealth = new Stealth({ scene, world, R: RAPIER, assets: charAssets, player, level });
+  } catch (err) {
+    console.error('Coworkers failed to start', err);
+  }
+  const beacons = new Beacons(scene, level, state);
+
   const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xd6a27c }));
   marker.renderOrder = 10;
   scene.add(marker);
@@ -191,7 +182,7 @@ async function boot() {
   const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; } };
 
   const game = new Game({
-    level, player, camCtl, input, hud, sfx, builder, marker,
+    level, player, camCtl, input, hud, sfx, builder, marker, stealth, beacons,
     onFloorChange: (floor) => placeSun(floor, player.renderPos.x, player.renderPos.z),
     onEnd: (r) => {
       mode = 'end';
@@ -208,7 +199,7 @@ async function boot() {
       $('end-breakdown').innerHTML = '';
       r.rows.forEach((row) => {
         const tr = document.createElement('tr');
-        const label = ['Sips', 'Refills'].includes(row.label) ? `${row.label} (${row.n})` : row.label;
+        const label = ['Sips', 'Refills', 'Pulled into a conversation', 'Slipped away'].includes(row.label) ? `${row.label} (${row.n})` : row.label;
         tr.innerHTML = `<td></td><td class="${row.pts < 0 ? 'neg' : ''}">${row.pts > 0 ? '+' : ''}${row.pts.toLocaleString('en-US')}</td>`;
         tr.firstChild.textContent = label;
         $('end-breakdown').appendChild(tr);
@@ -305,12 +296,17 @@ async function boot() {
   // Put the other commuter on stage for a moment so every character shader is compiled now.
   const spare = KINDS.map((k) => choices[k]).find((c) => c && c !== player.char);
   if (spare) { spare.root.position.set(level.spawn.x + 1.5, 0, level.spawn.z - 2); scene.add(spare.root); }
+  // Coworker labels, sight cones and X-ray beacons are normally hidden: show them for the compile.
+  stealth?.warmup(true);
+  beacons.warmup(true);
   builder.textures.forEach((t) => renderer.initTexture(t));
   const tBuilt = performance.now();
   await renderer.compileAsync(scene, camera);
   const tCompiled = performance.now();
   renderer.render(scene, camera);             // also builds the shadow-map shaders
   if (spare) { scene.remove(spare.root); spare.root.position.set(0, 0, 0); }
+  stealth?.warmup(false);
+  beacons.warmup(false);
   if (DEBUG) console.log(`[boot] rapier ${Math.round(tRapier - tBoot)} ms, build ${Math.round(tBuilt - tRapier)} ms, compile ${Math.round(tCompiled - tBuilt)} ms, first frame ${Math.round(performance.now() - tCompiled)} ms, since page start ${Math.round(performance.now())} ms`);
   ready = true;
   $('loading').hidden = true;
@@ -339,6 +335,7 @@ async function boot() {
       }
       if (steps === MAX_STEPS) acc = 0;      // fell far behind (tab hiccup): don't spiral
       player.interpolate(acc / STEP);
+      stealth?.interpolate(acc / STEP);
       level.elevator.interpolate(acc / STEP);
       animateCharacters(dt);
       camCtl.update(dt, player);
@@ -360,6 +357,8 @@ async function boot() {
 
   function animateCharacters(dt) {
     player.animate(dt);
+    stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' });
+    beacons.update(dt, player.floor);
     const label = game.busy?.label || '';
     const p = player.renderPos;
     for (const n of npcs) {
@@ -379,7 +378,8 @@ async function boot() {
       n.greetT = Math.max(0, (n.greetT || 0) - dt);
       if (n.greetT === 0) n.c.play(serving ? 'talk' : 'idle');
       n.tag.material.opacity += ((player.floor === 0 && d < 12 ? 1 : 0) - n.tag.material.opacity) * (1 - Math.exp(-dt * 6));
-      n.c.update(dt);
+      n.g.visible = player.floor === 0;          // lobby staff aren't drawn from upstairs
+      if (n.g.visible) n.c.update(dt);
     }
   }
 
@@ -412,7 +412,14 @@ async function boot() {
 
   if (DEBUG) {
     // Handle for automated playtests and performance checks (?debug in the URL).
-    window.__coffeeQuest = { game, player, state, level, renderer, scene, quality };
+    window.__coffeeQuest = {
+      game, player, state, level, renderer, scene, quality, stealth, camera, input, world,
+      // Run the simulation n fixed steps at once (automated playtests).
+      step(n) {
+        for (let i = 0; i < n && mode === 'playing'; i++) { game.update(STEP); world.step(); player.capture(); input.endFrame(); }
+        player.interpolate(1); stealth?.interpolate(1); level.elevator.interpolate(1);
+      },
+    };
   }
 }
 

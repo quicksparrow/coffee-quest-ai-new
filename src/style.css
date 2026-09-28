@@ -96,7 +96,7 @@ kbd {
 }
 #keycard kbd { font-size: 10.5px; padding: 3px 5px; min-width: 1.6em; }
 
-#xray-tag { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -180px); font: 600 14px var(--mono); letter-spacing: .3em; color: var(--lanyard); }
+#xray-tag { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); font: 600 13px var(--mono); letter-spacing: .3em; color: var(--lanyard); background: var(--glass); border: 1px solid rgba(118,162,230,.45); border-radius: 999px; padding: 6px 14px; }
 
 #fade { position: fixed; inset: 0; background: #0d1116; opacity: 0; pointer-events: none; transition: opacity .5s ease; }
 #fade.on { opacity: 1; }

@@ -19,7 +19,10 @@ const HINTS = {
   elevator: 'Just step in and wait, it goes on its own. Or press Space to leave right away.',
   floor2: "You're up! 2B is in the far corner, right across the open office.",
   nocoffee: "You can't walk in empty-handed. Coffee first!",
-  xray: 'Pro tip: hold X to see through the walls.',
+  xray: 'Pro tip: hold X to see through walls: who is around, where they are looking, coffee and hiding spots.',
+  hidden: "You're hidden. Wait for them to walk past, then press Space to step out.",
+  stuck: 'Stuck chatting. Tap Space to politely excuse yourself.',
+  slipped: 'Nice, they lost you. Hiding works on everyone except Josh the intern, he never gives up.',
   warn: 'Two minutes! Where are you?',
   late: 'The call started. Just get here, late is better than never.',
 };
@@ -33,8 +36,8 @@ const TUTORIAL = [
 ];
 
 export class Game {
-  constructor({ level, player, camCtl, input, hud, sfx, builder, marker, onFloorChange, onEnd }) {
-    Object.assign(this, { level, player, camCtl, input, hud, sfx, builder, marker, onFloorChange, onEnd });
+  constructor({ level, player, camCtl, input, hud, sfx, builder, marker, stealth, beacons, onFloorChange, onEnd }) {
+    Object.assign(this, { level, player, camCtl, input, hud, sfx, builder, marker, stealth, beacons, onFloorChange, onEnd });
     this.hintsOn = true;
     this._doorProbe = new THREE.Vector3();
     this.near = null;
@@ -68,6 +71,8 @@ export class Game {
     this.player.cup.visible = false;
     this.player.idleStyle = null;
     this.player.sipT = 0;
+    if (this.player.hidden) { this.player.hidden = null; this.player.collider.setEnabled(true); }
+    this.stealth?.reset();
     this.level.elevator.reset();
     this.player.teleport(this.level.spawn, this.level.spawnYaw);
     this.camCtl.snap();
@@ -117,6 +122,12 @@ export class Game {
       },
       call(0, P.callG),
       call(1, P.callF2),
+      ...this.level.hideSpots.map((spot) => ({
+        pos: spot.use, radius: spot.radius, floor: spot.floor,
+        enabled: () => !this.player.hidden,
+        label: () => ({ text: spot.label }),
+        use: () => this.hide(spot),
+      })),
       {
         zone: (p) => el.contains(p) && el.phase === 'idle' && el.doorsOpen,
         enabled: () => true,
@@ -174,11 +185,23 @@ export class Game {
     this.sfx.coin();
   }
 
+  hide(spot) {
+    this.player.hide(spot);
+    this.camCtl.snap();
+    this.sfx.tone(420, 0.12, 'triangle', 0.06);
+    this.hint('hidden');
+  }
+
+  unhide() {
+    if (!this.player.unhide()) { this.hud.pop("Someone's right outside", 'bad'); return; }
+    this.camCtl.snap();
+  }
+
   sip() {
     const c = this.state.coffee;
     if (c.sips <= 0 || this.sipCooldown > 0) return;
     c.sips -= 1;
-    this.sipCooldown = 0.8;
+    this.sipCooldown = 1.45;             // one sip at a time: the cup goes up, then back down
     this.boost = 8;
     this.score('Sips', 150, true);
     this.sfx.sip();
@@ -188,14 +211,14 @@ export class Game {
   score(label, pts, merge = false) {
     const existing = merge && this.events.find((e) => e.label === label);
     if (existing) { existing.pts += pts; existing.n += 1; } else this.events.push({ label, pts, n: 1 });
-    const short = { Sips: 'sip', Refills: 'refill', 'Second kind of coffee': 'second coffee' }[label] || label.toLowerCase();
-    this.hud.pop(`+${pts} ${short}`);
+    const short = { Sips: 'sip', Refills: 'refill', 'Second kind of coffee': 'second coffee', 'Pulled into a conversation': 'chat', 'Slipped away': 'slipped away' }[label] || label.toLowerCase();
+    this.hud.pop(`${pts > 0 ? '+' : ''}${pts} ${short}`, pts < 0 ? 'bad' : '');
   }
 
-  hint(id) {
+  hint(id, text = HINTS[id]) {
     if (!this.hintsOn || this.seenHints.has(id)) return;
     this.seenHints.add(id);
-    this.hud.text('Sam', HINTS[id]);
+    this.hud.text('Sam', text);
     this.sfx.buzz();
   }
 
@@ -275,9 +298,58 @@ export class Game {
       }
     }
 
+    // Stuck in a conversation: Space politely excuses you a little sooner.
+    const st = this.stealth;
+    let actionUsed = false;
+    if (st?.conversation) {
+      canMove = false;
+      if (input.action) { st.excuse(); this.hud.pop('"Sorry, I have a call…"'); actionUsed = true; }
+    }
+    // Hidden: stay put until Space (or walking) steps you out.
+    if (this.player.hidden) {
+      canMove = false;
+      if (input.action || input.forwardPressed || input.aboutFace) { this.unhide(); actionUsed = true; }
+    }
+
     this.boost = Math.max(0, this.boost - dt);
     this.sipCooldown = Math.max(0, this.sipCooldown - dt);
-    this.player.update(dt, input, { canMove, speedMul: this.boost > 0 ? 1.15 : 1, rideY });
+    if (!this.player.hidden) this.player.update(dt, input, { canMove, speedMul: this.boost > 0 ? 1.15 : 1, rideY });
+
+    // Coworkers: patrols, sight and suspicion, coming over, conversations.
+    if (st) {
+      const ev = {};
+      st.update(dt, {
+        pos: this.player.position, crouching: this.player.crouching || this.player.hidden?.pose === 'crouch',
+        hurrying: this.player.hurrying, hidden: !!this.player.hidden, lurk: this.player.hidden?.use, blending: !!this.busy,
+        riding: this.level.zones.inCab(p) && el.busy, active: !this.over,
+      }, ev);
+      if (ev.noticed) this.hint('noticed', `Uh oh, ${ev.noticed.def.name} spotted you. Get out of sight, or press C to crouch.`);
+      if (ev.spotted) { this.hud.pop(`${ev.spotted.def.name} wants a word!`, 'bad'); this.sfx.deny(); }
+      if (ev.slipped) { this.score('Slipped away', 100, true); this.hint('slipped'); }
+      if (ev.caught) {
+        const cw = ev.caught;
+        this.conversations += 1;
+        this.score('Pulled into a conversation', -300, true);
+        if (this.busy) { this.busy = null; }
+        this.player.crouching = false;
+        this.player.sipT = 0;
+        // Turn to face them (the short way round, cancelling any about-face in progress).
+        const face = Math.atan2(-(cw.pos.x - p.x), -(cw.pos.z - p.z));
+        const pl = this.player;
+        pl.turnAnim = null;
+        pl.yaw += Math.atan2(Math.sin(face - pl.yaw), Math.cos(face - pl.yaw));
+        pl.prevYaw = pl.yaw;
+        pl.idleStyle = 'talk';
+        this.hint('stuck');
+      }
+      // Caught this very step: nothing else happens with this step's keys.
+      if (ev.caught || st.conversation) { canMove = false; this.actionBuffer = 0; actionUsed = true; }
+      if (ev.released) {
+        this.player.idleStyle = null;
+        this.hud.pop('Free!', 'good');
+        this.hint('xray');
+      }
+    }
     // Move the car's colliders only after the rider has moved, so the two never overlap mid-step.
     if (el.dy !== 0) el.placeColliders();
 
@@ -297,10 +369,10 @@ export class Game {
 
     // Space: use the thing in front of you, otherwise sip.
     const near = !this.busy && canMove ? this.nearestInteractable() : null;
-    this.actionBuffer = input.action ? ACTION_BUFFER : Math.max(0, this.actionBuffer - dt);
+    this.actionBuffer = input.action && !actionUsed ? ACTION_BUFFER : Math.max(0, this.actionBuffer - dt);
     if (this.actionBuffer > 0 && !this.busy && canMove) {
       if (near && near.enabled()) { near.use(); this.actionBuffer = 0; }
-      else if (s.coffee.sips > 0 && input.action) { this.sip(); this.actionBuffer = 0; }
+      else if (s.coffee.sips > 0 && input.action && !actionUsed) { this.sip(); this.actionBuffer = 0; }
     }
 
     // Stair exit: wait by it for a few seconds and someone steps out, holding it open.
@@ -312,6 +384,7 @@ export class Game {
       this.smokeIn -= dt;
       if (this.smokeIn <= 0) {
         s.smokerOpen = true;
+        this.stealth?.startSmoker(p.x);
         this.smokeOpenT = SMOKE_OPEN;
         this.hud.pop("Door's open, go!", 'good');
       }
@@ -361,6 +434,8 @@ export class Game {
     });
     this.marker.material.depthTest = !on;
     this.hud.setXray(on);
+    this.stealth?.setXray(on);
+    this.beacons?.setXray(on);
   }
 
   // Called once per rendered frame (not per physics step).
@@ -395,7 +470,13 @@ export class Game {
     // Prompt: busy > interaction > sip > tutorial
     const el = this.level.elevator;
     const Z = this.level.zones;
-    if (this.busy) {
+    const talk = this.stealth?.conversation;
+    if (talk) {
+      const total = talk.cw.def.talk;
+      this.hud.setPrompt(`${talk.cw.def.name} is talking · tap Space to excuse yourself`, { key: 'Space', progress: 1 - this.stealth.remaining / total });
+    } else if (this.player.hidden) {
+      this.hud.setPrompt(`Hidden · ${this.player.hidden.name}. Space to step out`, { key: 'Space' });
+    } else if (this.busy) {
       this.hud.setPrompt(this.busy.label, { key: null, progress: this.busy.t / this.busy.duration });
     } else if (el.busy && Z.inCab(p)) {
       const text = el.moving ? (el.target === 1 ? 'Going up to Floor 2…' : 'Going down to the Lobby…') : 'Doors closing…';

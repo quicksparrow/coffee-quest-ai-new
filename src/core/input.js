@@ -24,6 +24,7 @@ export class Input {
   get left() { return this.down('ArrowLeft', 'KeyA'); }
   get right() { return this.down('ArrowRight', 'KeyD'); }
   get aboutFace() { return this.hit('ArrowDown', 'KeyS'); }
+  get forwardPressed() { return this.hit('ArrowUp', 'KeyW'); }
   get hurry() { return this.down('ShiftLeft', 'ShiftRight'); }
   get crouch() { return this.hit('KeyC'); }
   get xray() { return this.down('KeyX'); }

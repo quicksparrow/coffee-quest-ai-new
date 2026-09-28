@@ -107,6 +107,39 @@ export class Player {
 
   sip() { this.sipT = 0.001; }
 
+  // Tuck into a hiding spot (a phone pod, the closet, behind the plants). The capsule is switched
+  // off while hidden so it can sit inside the pod; movement is locked until you step out.
+  hide(spot) {
+    this.hidden = spot;
+    this.crouching = false;
+    this.hurrying = false;
+    this.collider.setEnabled(false);
+    this.teleport(spot.at, spot.yaw);
+    this.idleStyle = spot.pose;
+    this.oneShot = null;
+  }
+
+  // Step back out, next to the spot if someone is standing right on it. False if boxed in.
+  unhide() {
+    const spot = this.hidden;
+    if (!spot) return true;
+    const base = spot.exit || spot.at;
+    const shape = this.collider.shape;
+    const rot = { x: 0, y: 0, z: 0, w: 1 };
+    const tries = [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]];
+    const self = this.collider;
+    for (const [dx, dz] of tries) {
+      const at = { x: base.x + dx, y: base.y + CENTER + 0.02, z: base.z + dz };
+      if (this.world.intersectionWithShape(at, rot, shape, undefined, undefined, self)) continue;
+      this.hidden = null;
+      this.collider.setEnabled(true);
+      this.teleport(new THREE.Vector3(base.x + dx, base.y, base.z + dz), spot.exitYaw ?? this.yaw);
+      this.idleStyle = null;
+      return true;
+    }
+    return false;
+  }
+
   // Per rendered frame: pick the animation for what the player is doing and advance it.
   animate(dt) {
     const c = this.char;
@@ -126,10 +159,7 @@ export class Player {
     c.update(dt);
     if (this.sipT > 0) {
       this.sipT += dt;
-      const d = c.sipDuration;
-      const w = Math.min(1, this.sipT / 0.25, (d - this.sipT) / 0.25);
-      c.applySip(this.sipT, Math.max(0, w));
-      if (this.sipT >= d) this.sipT = 0;
+      if (!c.applySip(this.sipT, this.cup)) this.sipT = 0;
     }
   }
 
