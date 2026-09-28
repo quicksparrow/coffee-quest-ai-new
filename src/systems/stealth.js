@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Character, randomLook, CLIP_SPEED } from '../actors/character.js';
+import { Character, CLIP_SPEED, look } from '../actors/character.js';
 import { NavGrid } from './nav.js';
 import { nameTag, meter, drawMeter, bubble, drawBubble } from '../ui/sprites.js';
 
@@ -31,42 +31,42 @@ const SUS_DECAY = 0.4;
 // waypoints are found on the walkable grid, so paths only need to name the stops.
 const CAST = [
   {
-    id: 'pat', name: 'Pat', role: 'Accounting', kind: 'man', y: 0,
+    id: 'pat', name: 'Pat', role: 'Accounting', kind: 'man', y: 0, look: look('Mustard', 'Brown', 'Black'),
     speed: 1.25, cone: 36, range: 8, sense: 1, talk: 10, chase: 3.9,
     path: [[6.8, 12.6, 0], [15, 12.6, 2.5, 'phone'], [22.5, 16.3, 3, 'arms'], [7.2, 16.8, 0]],
     hey: 'Oh hey! Got a second?',
     lines: ['Did you submit your expense report?', 'Receipts need to be itemized now.', 'Even the coffee ones. Especially those.', 'Anyway, I will email you the new policy.'],
   },
   {
-    id: 'tom', name: 'Tom', role: 'Sales', kind: 'man', y: 0,
+    id: 'tom', name: 'Tom', role: 'Sales', kind: 'man', y: 0, look: look('Navy', 'Fair', 'Blonde'),
     speed: 1.3, cone: 40, range: 8, sense: 1, talk: 12, chase: 3.9,
     path: [[25, 22.6, 6, 'phone'], [24.6, 17.2, 0], [17.4, 17.2, 2.5, 'arms'], [19, 21.6, 0]],
     hey: 'My favorite person! Walk with me.',
     lines: ['Big quarter. BIG quarter.', 'Have you tried the new CRM?', 'We should grab lunch sometime.', 'Okay, go, go, you look busy.'],
   },
   {
-    id: 'priya', name: 'Priya', role: 'IT', kind: 'woman', y: F2,
+    id: 'priya', name: 'Priya', role: 'IT', kind: 'woman', y: F2, look: look('Teal', 'Brown', 'Black'),
     speed: 1.35, cone: 45, range: 9, sense: 1, talk: 12, chase: 3.9,
     path: [[1.5, 10.1, 2, 'phone'], [19.2, 10.1, 0], [12, 7, 3, 'arms'], [12, 10.1, 0]],
     hey: 'Oh! Did you install the update yet?',
     lines: ['It is a mandatory update.', 'It only takes forty minutes.', 'Please do not click the pop-up.', 'Okay. Restart tonight, promise?'],
   },
   {
-    id: 'dave', name: 'Dave', role: 'Storyteller', kind: 'man', y: F2,
+    id: 'dave', name: 'Dave', role: 'Storyteller', kind: 'man', y: F2, look: look('Forest', 'Fair', 'Auburn'),
     speed: 1.0, cone: 55, range: 7.5, sense: 0.85, talk: 15, chase: 3.5,
     path: [[11, 14.1, 1.5, 'phone'], [22.85, 14.1, 0], [22.85, 18.4, 2, 'arms'], [11, 18.4, 0]],
     hey: 'Hey hey! You will not believe my weekend.',
     lines: ['So Saturday, right, we rent a canoe.', 'And THEN the dog jumps in.', 'No wait, it gets better.', 'Anyway, you had to be there.'],
   },
   {
-    id: 'monica', name: 'Monica', role: 'Manager', kind: 'woman', y: F2,
+    id: 'monica', name: 'Monica', role: 'Manager', kind: 'woman', y: F2, look: look('Burgundy', 'Medium', 'Brown'),
     speed: 1.55, cone: 22, range: 11, sense: 1.1, talk: 20, chase: 4.1,
     path: [[10.6, 17.8, 2, 'phone'], [10.6, 22.3, 0], [17.2, 22.3, 2, 'arms'], [10.6, 22.3, 0]],
     hey: 'Oh good, you are here. Quick question!',
     lines: ['Could you own the Q3 deck?', 'Just a few slides. Maybe forty.', 'Loop in legal. And finance.', 'Great, let us circle back after the call.'],
   },
   {
-    id: 'josh', name: 'Josh', role: 'Intern', kind: 'man', y: F2,
+    id: 'josh', name: 'Josh', role: 'Intern', kind: 'man', y: F2, look: look('Lilac', 'Deep', 'Black'),
     speed: 1.35, cone: 40, range: 7, sense: 1.2, talk: 8, chase: 3.8, persistent: true,
     path: [[12.3, 22.4, 4, 'arms'], [22.85, 22.4, 0], [22.85, 14.1, 0], [25.3, 13.1, 0], [27, 13.1, 0], [29.6, 13.9, 0], [30.4, 12.8, 3, 'phone'], [29.6, 13.9, 0], [27, 13.1, 0], [25.3, 13.1, 0], [22.85, 14.1, 0], [22.85, 22.4, 0]],
     hey: 'Hi! Um, do you know how the printer works?',
@@ -75,7 +75,17 @@ const CAST = [
 ];
 
 // The person who steps out through the Floor 2 stair door for a smoke. Friendly: holds the door.
-const SMOKER = { id: 'rita', name: 'Rita', role: 'Smoke break', kind: 'woman' };
+const SMOKER = { id: 'rita', name: 'Rita', role: 'Smoke break', kind: 'woman', look: look('Olive', 'Medium', 'Auburn') };
+
+// Already in Meeting 2B: Linda presents at the screen, Sam (who texts you tips) sits at the table.
+// They react when you walk in: nice things if you're on time, passive-aggressive ones if not.
+const ATTENDEES = [
+  { id: 'linda', name: 'Linda', role: 'VP', kind: 'woman', look: look('Slate', 'Fair', 'Brown'), at: [1.4, 20.1], yaw: -Math.PI / 2, pose: 'talk' },
+  { id: 'sam', name: 'Sam', role: 'Work buddy', kind: 'man', look: look('Charcoal', 'Brown', 'Black'), at: [4.6, 17.95], yaw: Math.PI, pose: 'sit' },
+];
+// Where Monica goes at 9:00: to the door of 2B, then inside.
+const MEETING_DOOR = new THREE.Vector3(10.4, F2, 21);
+const MEETING_SPOTS = [new THREE.Vector3(8.1, F2, 21), new THREE.Vector3(7.3, F2, 19.2)];
 
 const tmpV = new THREE.Vector3();
 
@@ -106,8 +116,7 @@ class Coworker {
     this.group = new THREE.Group();
     if (sys.assets) {
       this.char = new Character(sys.assets, def.kind);
-      const l = randomLook();
-      this.char.setOutfit(l.outfit); this.char.setSkin(l.skin); this.char.setHair(l.hair);
+      if (def.look) this.char.setLook(def.look);
       this.char.glowMats = [this.char.body.material, ...(this.char.hairMats || [])];
     } else {
       this.char = new StandIn(0x9a6b5a);
@@ -137,6 +146,16 @@ export class Stealth {
     this.nav = [new NavGrid(world, R, { y: 0, skip }), new NavGrid(world, R, { y: F2, skip })];
     this.list = CAST.map((def) => this.makeCoworker(def));
     this.smoker = this.makeSmoker();
+    this.attendees = ATTENDEES.map((def) => {
+      const cw = new Coworker({ ...def, friendly: true }, this);
+      cw.pos.set(def.at[0], F2, def.at[1]);
+      cw.prev.copy(cw.pos);
+      cw.yaw = cw.prevYaw = def.yaw;
+      cw.attendee = true;
+      return cw;
+    });
+    this.everyone = [...this.list, this.smoker, ...this.attendees];
+    this.monica = this.list.find((c) => c.def.id === 'monica');
     this.sightPredicate = (c) => !this.seeThrough.has(c.handle);
     this.reset();
   }
@@ -205,12 +224,63 @@ export class Stealth {
       cw.say = null; cw.sayT = 0;
       cw.moving = false;
       cw.slipped = false;
+      cw.reactAnim = null;
       this.placeBody(cw);
     }
     const s = this.smoker;
     s.active = false;
     s.group.visible = false;
     s.say = null; s.sayT = 0;
+    for (const a of this.attendees) { a.state = 'attending'; a.say = null; a.sayT = 0; a.reactAnim = null; a.yaw = a.prevYaw = a.def.yaw; }
+    this.reaction = null;
+    this.meetingCalled = false;
+    this.level.state.npcDoor = false;
+  }
+
+  // ---------- 9:00: Monica heads into the call ----------
+  callToMeeting() { this.meetingCalled = true; }
+
+  sendMonica() {
+    const m = this.monica;
+    m.state = 'toMeeting';
+    m.sus = 0;
+    m.route = [...(m.nav.find(m.pos, MEETING_DOOR) || [MEETING_DOOR.clone()]), ...MEETING_SPOTS.map((p) => p.clone())];
+    m.say = 'Oh! Nine o\'clock. Gotta run.'; m.sayT = 2.4;
+  }
+
+  // ---------- Walking into 2B ----------
+  // Who says what when you arrive. Returns the quote for the end screen.
+  react({ late, cups, lastTalker }) {
+    const [linda, sam] = this.attendees;
+    const monicaIn = this.monica.state === 'inMeeting';
+    const seq = [];
+    if (!late) {
+      seq.push([0.3, linda, cups >= 5 ? 'Right on time, and nobody even saw you. Impressive.' : 'Right on time. Love that.', 'cheer']);
+      seq.push([1.5, sam, lastTalker ? `You got away from ${lastTalker}? Legend.` : cups >= 4 ? 'Coffee AND on time? Who are you?' : 'See? Told them you would make it.', null]);
+    } else {
+      seq.push([0.3, linda, 'Oh good. You could join us.', 'arms']);
+      seq.push([1.5, sam, lastTalker ? `Let me guess. ${lastTalker}?` : 'We started without you...', null]);
+      if (monicaIn) seq.push([2.6, this.monica, 'Per my calendar invite, this started at nine.', 'arms']);
+      else seq.push([2.6, linda, 'No, no. We will just go back to slide one.', 'arms']);
+    }
+    this.reaction = { t: 0, seq };
+    return late ? '"Oh good. You could join us." Linda, VP' : `"${seq[0][2]}" Linda, VP`;
+  }
+
+  tickReaction(dt) {
+    const r = this.reaction;
+    if (!r) return;
+    r.t += dt;
+    for (const item of r.seq) {
+      if (item.done || r.t < item[0]) continue;
+      item.done = true;
+      const [, cw, text, anim] = item;
+      cw.say = text; cw.sayT = 5;
+      cw.reactAnim = anim;
+      const P = this.player.renderPos;
+      if (!cw.def.pose || cw.def.pose !== 'sit') cw.yaw = cw.prevYaw = yawTo(P.x - cw.pos.x, P.z - cw.pos.z);
+    }
+    for (const cw of this.attendees.concat(this.monica)) cw.sayT = Math.max(0, cw.sayT - (cw.say && cw.sayT < 90 ? dt : 0));
   }
 
   beginLeg(cw) { cw.route = cw.legs[cw.stop].map((p) => p.clone()); }
@@ -281,12 +351,26 @@ export class Stealth {
     this.grace = Math.max(0, this.grace - dt);
     this.updateSmoker(dt);
     if (this.conversation) this.updateConversation(dt, events);
+    const m = this.monica;
+    if (this.meetingCalled && !['talk', 'toMeeting', 'inMeeting'].includes(m.state)) this.sendMonica();
     for (const cw of this.list) {
       cw.prev.copy(cw.pos);
       cw.prevYaw = cw.yaw;
       cw.cooldown = Math.max(0, cw.cooldown - dt);
       cw.sayT = Math.max(0, cw.sayT - dt);
       if (cw.state === 'talk') { this.placeBody(cw); continue; }
+      if (cw.state === 'toMeeting') {
+        this.level.state.npcDoor = Math.hypot(cw.pos.x - 9, cw.pos.z - 21) < 2.6;
+        if (this.walk(cw, dt, cw.def.speed * 1.3, null)) { cw.state = 'inMeeting'; this.level.state.npcDoor = false; }
+        this.placeBody(cw);
+        continue;
+      }
+      if (cw.state === 'inMeeting') {
+        cw.moving = false;
+        cw.yaw += angleDiff(Math.PI / 2, cw.yaw) * Math.min(1, dt * 4);   // facing the screen
+        this.placeBody(cw);
+        continue;
+      }
 
       // Suspicion
       let seenD = -1;
@@ -505,23 +589,29 @@ export class Stealth {
 
   // ---------- Per rendered frame ----------
   interpolate(alpha) {
-    const all = [...this.list, this.smoker];
+    const all = this.everyone;
     for (const cw of all) {
       cw.group.position.lerpVectors(cw.prev, cw.pos, alpha);
       cw.group.rotation.y = cw.prevYaw + angleDiff(cw.yaw, cw.prevYaw) * alpha;
     }
   }
 
-  animate(dt, { playerPos, playerFloor, playing }) {
-    const all = [...this.list, this.smoker];
-    for (const cw of all) {
+  animate(dt, { playerPos, playerFloor, playing: live }) {
+    this.tickReaction(dt);
+    for (const cw of this.everyone) {
+      // Once you're in 2B, only the people in the room keep their labels.
+      const playing = live && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
+      if (cw.attendee) { cw.group.position.copy(cw.pos); cw.group.rotation.y = cw.yaw; }
       if (cw === this.smoker && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; continue; }
       const floor = cw.group.position.y > 2 ? 1 : 0;
       const same = floor === playerFloor;
       const d = Math.hypot(playerPos.x - cw.group.position.x, playerPos.z - cw.group.position.z);
       // Animation
       let key = 'idle';
-      if (cw.state === 'talk') key = 'talk';
+      if (cw.reactAnim) key = cw.reactAnim;
+      else if (cw.attendee) key = cw.def.pose;
+      else if (cw.state === 'inMeeting') key = 'arms';
+      else if (cw.state === 'talk') key = 'talk';
       else if (cw === this.smoker) key = 'walk';
       else if (cw.moving) key = cw.state === 'chase' ? 'jog' : 'walk';
       else if (cw.state === 'wait') key = cw.stops[cw.stop].pose || 'idle';
@@ -592,9 +682,9 @@ export class Stealth {
 
   setXray(on) {
     this.xray = on;
-    for (const cw of [...this.list, this.smoker]) {
+    for (const cw of this.everyone) {
       for (const m of cw.char.glowMats || []) {
-        m.emissive.setHex(on ? (cw === this.smoker ? 0x2a5aa0 : 0xc2412a) : 0x000000);
+        m.emissive.setHex(on ? (cw.def.friendly ? 0x2a5aa0 : 0xc2412a) : 0x000000);
         m.emissiveIntensity = on ? 0.9 : 1;
       }
     }

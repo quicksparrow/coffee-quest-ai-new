@@ -5,7 +5,7 @@ import { Game } from './core/game.js';
 import { Builder } from './world/builder.js';
 import { buildLevel, F2 } from './world/level1.js';
 import { Player } from './actors/player.js';
-import { loadCharacterAssets, Character, KINDS, NAMES, randomLook } from './actors/character.js';
+import { loadCharacterAssets, Character, KINDS, NAMES, PLAYER_LOOKS, look as lookOf } from './actors/character.js';
 import { FollowCamera } from './systems/camera.js';
 import { Hud } from './ui/hud.js';
 import { nameTag } from './ui/sprites.js';
@@ -113,7 +113,7 @@ async function boot() {
   // ---------- Characters: Claire or Steven, plus the receptionist and barista ----------
   let charAssets = await charactersReady;
   const LOOK_KEY = 'coffee-quest-commuter';
-  let look = { kind: 0, ...randomLook() };          // clothes, skin and hair are random every run
+  const look = { kind: 0 };                          // Claire (blonde) or Steven (black hair), always the same look
   try { const saved = Number(localStorage.getItem(LOOK_KEY)); if (saved === 0 || saved === 1) look.kind = saved; } catch { /* private mode */ }
   const choices = {};
   const npcs = [];
@@ -125,11 +125,10 @@ async function boot() {
     }
   }
   if (charAssets) {
-    // Lobby staff: a random look each visit, a name tag, and they turn to greet you.
-    const npc = (kind, x, z, yaw, name, role) => {
+    // Lobby staff: a name tag, and they turn to greet you.
+    const npc = (kind, x, z, yaw, name, role, l) => {
       const c = new Character(charAssets, kind);
-      const l = randomLook();
-      c.setOutfit(l.outfit); c.setSkin(l.skin); c.setHair(l.hair);
+      c.setLook(l);
       const g = new THREE.Group();
       g.position.set(x, 0, z);
       g.rotation.y = yaw;
@@ -142,17 +141,16 @@ async function boot() {
       npcs.push(n);
       return n;
     };
-    level.receptionist = npc('woman', 3.5, 13.7, Math.PI, 'Dana', 'Reception');
-    level.barista = npc('man', 21, 21.4, 0, 'Leo', 'Barista');
+    level.receptionist = npc('woman', 3.5, 13.7, Math.PI, 'Dana', 'Reception', lookOf('White', 'Deep', 'Black'));
+    level.barista = npc('man', 21, 21.4, 0, 'Leo', 'Barista', lookOf('Charcoal', 'Brown', 'Brown'));
   }
   const applyLook = () => {
     try { localStorage.setItem(LOOK_KEY, String(look.kind)); } catch { /* ignore */ }
     const c = choices[KINDS[look.kind]];
     if (!c) return;
-    c.setOutfit(look.outfit); c.setSkin(look.skin); c.setHair(look.hair);
+    c.setLook(PLAYER_LOOKS[KINDS[look.kind]]);
     if (player.char !== c) player.setCharacter(c);
   };
-  const shuffleLook = () => { look = { ...look, ...randomLook() }; applyLook(); };
   applyLook();
 
   // Coworkers with patrols, sight and conversations (see systems/stealth.js).
@@ -187,12 +185,12 @@ async function boot() {
     onEnd: (r) => {
       mode = 'end';
       dirty = true;
+      endBlend = 0;
       hud.setPrompt(null);
+      hud.show(false);                 // the room reacts first, full screen
       $('end-eyebrow').textContent = `Arrived ${r.arrived}`;
       $('end-title').textContent = r.late ? 'Late, but you made it' : 'Right on time';
-      $('end-line').textContent = r.late
-        ? '"Glad you could join us." Everyone saw you walk in.'
-        : 'Your manager nods. Nobody suspects the coffee run.';
+      $('end-line').textContent = r.quote || (r.late ? '"Oh good. You could join us."' : 'Right on time. Nobody suspects the coffee run.');
       $('end-rating').textContent = `${r.cups} cup${r.cups > 1 ? 's' : ''} · ${r.rating}`;
       const cup = (full) => `<svg class="cup${full ? ' full' : ''}" viewBox="0 0 40 40"><path class="body" d="M8 12 H28 L26 34 H10 Z"/><path class="handle" d="M28 16 C36 16 36 26 27 26"/></svg>`;
       $('end-cups').innerHTML = [1, 2, 3, 4, 5].map((i) => cup(i <= r.cups)).join('');
@@ -205,7 +203,8 @@ async function boot() {
         $('end-breakdown').appendChild(tr);
       });
       $('end-score').textContent = r.total.toLocaleString('en-US');
-      setTimeout(() => showScreen('end'), 600);
+      // Let the room react first (a few seconds of speech bubbles), then the score card.
+      setTimeout(() => { if (mode === 'end') showScreen('end'); }, 4200);
     },
   });
 
@@ -223,9 +222,7 @@ async function boot() {
   const pickerKey = (code) => {
     if (['ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'].includes(code)) {
       look.kind = (look.kind + 1) % KINDS.length;
-      shuffleLook();
-    } else if (code === 'Space') {
-      shuffleLook();
+      applyLook();
     } else return;
     renderPicker();
   };
@@ -246,7 +243,7 @@ async function boot() {
     camera.clearViewOffset();
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
     camCtl.snap();
-    if (mode === 'end' || mode === 'paused') { game.reset(); shuffleLook(); resetNpcs(); }
+    if (mode === 'end' || mode === 'paused') { game.reset(); resetNpcs(); }
     input.endFrame();                 // drop any keys pressed while a menu was open
     mode = 'playing';
     acc = 0;
@@ -268,7 +265,7 @@ async function boot() {
     const enter = e.code === 'Enter' || e.code === 'NumpadEnter';
     if (mode === 'start' && enter && !needsKeyboardNotice()) startGame();
     else if (mode === 'start') pickerKey(e.code);
-    else if (mode === 'end' && enter) startGame();
+    else if (mode === 'end' && enter && !$('end').hidden) startGame();   // after the room has reacted
     else if (mode === 'playing' && (e.code === 'Escape' || e.code === 'KeyP')) pause();
     else if (mode === 'paused') {
       if (e.code === 'Escape' || e.code === 'KeyP' || e.code === 'Space' || enter) resume();
@@ -346,7 +343,7 @@ async function boot() {
     } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
       // Menus with a living character behind them keep animating.
       animateCharacters(dt);
-      if (mode === 'start') selectCam(); else camCtl.update(dt, player);
+      if (mode === 'start') selectCam(); else endCam(dt);
       renderer.render(scene, camera);
     } else if (dirty && !noticeOnly) {
       camCtl.update(dt, player);
@@ -355,9 +352,25 @@ async function boot() {
     }
   }
 
+  // Walking into 2B: the camera moves into the room's far corner so you see everyone react.
+  const END_POS = new THREE.Vector3(0.6, F2 + 2.2, 23.6);
+  const END_LOOK = new THREE.Vector3(5.2, F2 + 1.0, 19.6);
+  let endBlend = 0;
+  function endCam(dt) {
+    if (!game.inMeeting) { camCtl.update(dt, player); return; }
+    // A beat on the follow camera as you step in, then a cut to the room (a camera move
+    // would pass through the wall).
+    endBlend += dt;
+    if (endBlend < 0.35) { camCtl.update(dt, player); return; }
+    const drift = Math.min(1, (endBlend - 0.35) / 4);           // slow push-in while they talk
+    camera.position.copy(END_POS).lerp(END_LOOK, drift * 0.12);
+    camera.lookAt(END_LOOK);
+    player.setFade(1);
+  }
+
   function animateCharacters(dt) {
     player.animate(dt);
-    stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' });
+    stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' || mode === 'end' });
     beacons.update(dt, player.floor);
     const label = game.busy?.label || '';
     const p = player.renderPos;

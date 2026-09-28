@@ -176,6 +176,16 @@ export function buildLevel(b, state) {
   // Meeting 2B furniture
   b.box(2, F2, 18.6, 6.5, F2 + 0.75, 21.6, { color: C.counter });
   b.box(0.1, F2 + 1, 18.5, 0.25, F2 + 2.2, 22, { color: 0x2b2f35, collide: false });
+  // Chairs round the table (Sam sits in the one on the north side).
+  const chair = (x, z, back) => {
+    b.box(x - 0.25, F2, z - 0.25, x + 0.25, F2 + 0.46, z + 0.25, { color: 0x3d4450 });
+    const [bx1, bz1, bx2, bz2] = back === 'n' ? [x - 0.25, z - 0.3, x + 0.25, z - 0.22] : [x - 0.25, z + 0.22, x + 0.25, z + 0.3];
+    b.box(bx1, F2 + 0.46, bz1, bx2, F2 + 1.0, bz2, { color: 0x3d4450, collide: false });
+  };
+  chair(4.6, 17.95, 'n');
+  chair(3.0, 17.95, 'n');
+  chair(3.0, 22.25, 's');
+  chair(4.6, 22.25, 's');
   // Lounge, phone pods, printer, closet shelves
   b.box(28.5, F2, 21.8, 31.6, F2 + 0.7, 23.2, { color: 0x6f7f95 });
   b.box(23.4, F2, 17.5, 25.4, F2 + 2.3, 19.7, { color: C.glass, opacity: 0.5, xray: false });
@@ -193,7 +203,7 @@ export function buildLevel(b, state) {
   // Meeting 2B: opens as you walk up.
   const meetingDoor = new Door(b, {
     axis: 'z', a: 20, b: 22, fixed: 9, y0: F2, h: 2.4, color: 0x6b8fb3,
-    shouldOpen: (p) => onF2(p) && Math.hypot(p.x - 9, p.z - 21) < 2,
+    shouldOpen: (p) => (onF2(p) && Math.hypot(p.x - 9, p.z - 21) < 2) || state.npcDoor,
   });
   doors.push(meetingDoor);
 

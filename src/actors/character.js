@@ -15,7 +15,14 @@ export const OUTFITS = [
   { name: 'Teal', color: 0x4e9c98 },
   { name: 'Mustard', color: 0xd9b04e },
   { name: 'Lilac', color: 0xa98fd0 },
+  { name: 'Navy', color: 0x3a4f7a },
+  { name: 'Forest', color: 0x3f6b4f },
+  { name: 'Burgundy', color: 0x7a2e3b },
+  { name: 'Charcoal', color: 0x55595f },
+  { name: 'Olive', color: 0x7d7a3a },
+  { name: 'Slate', color: 0x6f8296 },
 ];
+const O = Object.fromEntries(OUTFITS.map((o, i) => [o.name, i]));
 // Skin tones are a tint over the base skin texture (the pack's two textures are nearly identical).
 export const SKINS = [
   { name: 'Fair', tint: [1.16, 1.12, 1.1] },
@@ -31,6 +38,12 @@ export const HAIRS = [
 ];
 export const KINDS = ['woman', 'man'];
 export const NAMES = { woman: 'Claire', man: 'Steven' };
+
+// Everyone has one fixed look, so you learn who's who. look(outfit, skin, hair) by name.
+export function look(outfit, skin, hair) {
+  return { outfit: O[outfit], skin: SKINS.findIndex((x) => x.name === skin), hair: HAIRS.findIndex((x) => x.name === hair) };
+}
+export const PLAYER_LOOKS = { woman: look('Sky', 'Medium', 'Blonde'), man: look('White', 'Medium', 'Black') };
 
 // A random outfit, skin tone and hair color (picked fresh every run).
 export function randomLook() {
@@ -175,7 +188,7 @@ float cloth = 0.0;
   return m;
 }
 
-const LOOP = { idle: 'Idle_Loop', walk: 'Walk_Loop', jog: 'Jog_Fwd_Loop', hurry: 'Sprint_Loop', crouch: 'Crouch_Idle_Loop', crouchWalk: 'Crouch_Fwd_Loop', phone: 'Idle_TalkingPhone_Loop', talk: 'Idle_Talking_Loop', arms: 'Idle_FoldArms_Loop', cheer: 'Yes' };
+const LOOP = { sit: 'Sitting_Idle_Loop', idle: 'Idle_Loop', walk: 'Walk_Loop', jog: 'Jog_Fwd_Loop', hurry: 'Sprint_Loop', crouch: 'Crouch_Idle_Loop', crouchWalk: 'Crouch_Fwd_Loop', phone: 'Idle_TalkingPhone_Loop', talk: 'Idle_Talking_Loop', arms: 'Idle_FoldArms_Loop', cheer: 'Yes' };
 // Natural ground speed of each locomotion clip at timeScale 1 (m/s), measured from the clips'
 // foot travel, so playback speed can match movement speed and feet don't slide.
 export const CLIP_SPEED = { walk: 1.25, jog: 4.2, hurry: 6.5, crouchWalk: 0.8 };
@@ -230,6 +243,8 @@ export class Character {
     this.setSkin(1);
     this.setHair(1);
   }
+
+  setLook(l) { this.setOutfit(l.outfit); this.setSkin(l.skin); this.setHair(l.hair); }
 
   setOutfit(i) { this.body.material.userData.uniforms.uTop.value.setHex(OUTFITS[i].color); }
 

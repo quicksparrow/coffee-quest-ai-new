@@ -1,6 +1,6 @@
 # Coffee Quest
 
-A third-person stealth game about the most dangerous eight minutes of the workday. It's 8:52, your call starts at 9:00 in Meeting 2B, you forgot your badge, and you are not joining without coffee.
+A third-person stealth game about the most dangerous eight minutes of the workday. It's 8:55, your call starts at 9:00 in Meeting 2B, you forgot your badge, and you are not joining without coffee.
 
 Built with Three.js (3D) and Rapier (collisions), bundled with Vite. Runs in any desktop browser. Keyboard only.
 
@@ -17,7 +17,7 @@ Then open the address it prints (usually http://localhost:5173).
 
 ## Choose your commuter
 
-The start screen lets you play as **Claire** or **Steven** (← → to switch, Enter to start; your pick is remembered). Their outfit color, skin tone and hair color are random every run; press Space on the start screen for a new one.
+The start screen lets you play as **Claire** (blonde, blue blouse) or **Steven** (black hair, white shirt and tie). ← → to switch, Enter to start; your pick is remembered. Everyone in the office has one fixed look too, so you learn who's who.
 
 ## Controls
 
@@ -34,7 +34,9 @@ The start screen lets you play as **Claire** or **Steven** (← → to switch, E
 
 ## Level 1: "Badge? What Badge?"
 
-Get a coffee, then walk into Meeting 2B on Floor 2. Arriving after 09:00 is allowed but costs points.
+Get a coffee, then walk into Meeting 2B on Floor 2. The clock starts at 08:55 and runs three times as fast as real time, so you have 100 seconds. Arriving after 09:00 is allowed but costs points, and the room lets you know it.
+
+Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, is at the table. When you walk in the camera cuts to the room and they react: "Right on time. Love that." if you made it, "Oh good. You could join us." if you didn't. At 9:00 Monica stops patrolling and heads into the call, so she's there to remind you when it started.
 
 - Lobby café latte or the kitchen espresso upstairs, as many as you like: finish your cup and grab another. Dana at reception and Leo at the café have name tags and turn to greet you.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.

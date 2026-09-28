@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
-export const ROUND_SECONDS = 360;          // 08:52 → 09:00 in real seconds (6 minutes)
-const GAME_SECONDS_PER_REAL = 480 / ROUND_SECONDS;
-const START_MIN = 8 * 60 + 52;
+export const ROUND_SECONDS = 100;          // 08:55 → 09:00 in real seconds: the clock runs 3× fast
+const GAME_SECONDS_PER_REAL = 300 / ROUND_SECONDS;
+const START_MIN = 8 * 60 + 55;
+const WARN_AT = ROUND_SECONDS - 120 / GAME_SECONDS_PER_REAL;   // 08:58
 
 const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
 const SMOKE_WAIT = 3;       // wait at the stair exit this long before someone opens it (seconds)…
@@ -62,6 +63,9 @@ export class Game {
     this.seenHints = new Set();
     this.events = [];
     this.conversations = 0;
+    this.inMeeting = false;
+    this.lastTalker = null;
+    this.called = false;
     this.inMeetingNoCoffee = false;
     this.tut = { i: 0, t: 0 };
     this.stats = { moved: false, turned: false, aboutFaced: false, hurried: false, crouched: false, xray: false };
@@ -329,6 +333,7 @@ export class Game {
       if (ev.caught) {
         const cw = ev.caught;
         this.conversations += 1;
+        this.lastTalker = cw.def.name;
         this.score('Pulled into a conversation', -300, true);
         if (this.busy) { this.busy = null; }
         this.player.crouching = false;
@@ -402,9 +407,10 @@ export class Game {
     if (Z.turnstileFront(pp) && !s.hasBadge) this.hint('turnstile');
     if (Z.stairDoorInside(pp) && !s.smokerOpen) this.hint('stairdoor');
     if (this.elapsed > 50 && !this.stats.xray) this.hint('xray');
-    const warnAt = ROUND_SECONDS - 2 * 45;
-    if (this.elapsed > warnAt) this.hint('warn');
+    if (this.elapsed > WARN_AT) this.hint('warn');
     if (this.elapsed > ROUND_SECONDS) this.hint('late');
+    // Just before nine, Monica heads into the call.
+    if (this.elapsed > ROUND_SECONDS - 2 && !this.called) { this.called = true; this.stealth?.callToMeeting(); }
 
     // Floor change → move the shadow light
     if (this.player.floor !== this.lastFloor) { this.lastFloor = this.player.floor; this.onFloorChange(this.lastFloor); }
@@ -458,7 +464,7 @@ export class Game {
 
     // Clock
     const late = this.elapsed > ROUND_SECONDS;
-    const warn = this.elapsed > ROUND_SECONDS - 2 * 45;
+    const warn = this.elapsed > WARN_AT;
     let sub = 'Call at 09:00';
     if (late) {
       const ls = Math.floor((this.elapsed - ROUND_SECONDS) * GAME_SECONDS_PER_REAL);
@@ -503,24 +509,28 @@ export class Game {
 
   finish() {
     this.over = true;
-    this.player.idleStyle = 'cheer';
+    this.inMeeting = true;
     this.player.moving = false;
     const s = this.state;
     const late = Math.max(0, this.elapsed - ROUND_SECONDS);
+    this.player.idleStyle = late > 0 ? 'idle' : 'cheer';
+    this.hud.setPrompt(null);
     const left = Math.max(0, ROUND_SECONDS - this.elapsed);
     const rows = [...this.events];
     const mmss = (real) => { const g = Math.floor(real * GAME_SECONDS_PER_REAL); return `${Math.floor(g / 60)}m ${String(g % 60).padStart(2, '0')}s`; };
-    if (left > 0) rows.push({ label: `Time to spare (${mmss(left)})`, pts: Math.round(left * 10), n: 1 });
-    if (late > 0) rows.push({ label: `Late by ${mmss(late)}`, pts: -Math.round(late * 20), n: 1 });
+    if (left > 0) rows.push({ label: `Time to spare (${mmss(left)})`, pts: Math.round(left * 20), n: 1 });
+    if (late > 0) rows.push({ label: `Late by ${mmss(late)}`, pts: -Math.round(late * 40), n: 1 });
     if (this.conversations === 0) rows.push({ label: 'Never pulled into a conversation', pts: 2000, n: 1 });
     const total = Math.max(0, rows.reduce((a, r) => a + r.pts, 0));
     let cups;
     if (this.conversations === 0 && s.coffee.latte && s.coffee.espresso && late === 0) cups = 5;
     else cups = total >= 4000 ? 4 : total >= 2800 ? 3 : total >= 1500 ? 2 : 1;
     if (late > 0) cups = Math.min(cups, 2);
-    this.sfx.win();
+    if (late > 0) this.sfx.deny(); else this.sfx.win();
+    // The people in 2B react (see Stealth.react); the score card follows a few seconds later.
+    const quote = this.stealth?.react({ late: late > 0, cups, lastTalker: this.lastTalker }) || null;
     this.onEnd({
-      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1],
+      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1], quote,
     });
   }
 }
