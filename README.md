@@ -17,7 +17,7 @@ Then open the address it prints (usually http://localhost:5173).
 
 ## Choose your commuter
 
-The start screen lets you play as **Claire** (blonde, blue blouse) or **Steven** (black hair, white shirt and tie). ← → to switch, Enter to start; your pick is remembered. Everyone in the office has one fixed look too, so you learn who's who.
+The start screen lets you play as **Claire** (blonde, blue blouse) or **Steven** (Black, with black hair, white shirt and tie). ← → to switch, Enter to start; your pick is remembered. Everyone in the office has one fixed look too, so you learn who's who.
 
 ## Controls
 

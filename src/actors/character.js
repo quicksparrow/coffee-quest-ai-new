@@ -43,7 +43,7 @@ export const NAMES = { woman: 'Claire', man: 'Steven' };
 export function look(outfit, skin, hair) {
   return { outfit: O[outfit], skin: SKINS.findIndex((x) => x.name === skin), hair: HAIRS.findIndex((x) => x.name === hair) };
 }
-export const PLAYER_LOOKS = { woman: look('Sky', 'Medium', 'Blonde'), man: look('White', 'Medium', 'Black') };
+export const PLAYER_LOOKS = { woman: look('Sky', 'Medium', 'Blonde'), man: look('White', 'Deep', 'Black') };
 
 // A random outfit, skin tone and hair color (picked fresh every run).
 export function randomLook() {

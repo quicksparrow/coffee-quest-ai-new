@@ -66,7 +66,7 @@ const CAST = [
     lines: ['Could you own the Q3 deck?', 'Just a few slides. Maybe forty.', 'Loop in legal. And finance.', 'Great, let us circle back after the call.'],
   },
   {
-    id: 'josh', name: 'Josh', role: 'Intern', kind: 'man', y: F2, look: look('Lilac', 'Deep', 'Black'),
+    id: 'josh', name: 'Josh', role: 'Intern', kind: 'man', y: F2, look: look('Lilac', 'Medium', 'Brown'),
     speed: 1.35, cone: 40, range: 7, sense: 1.2, talk: 8, chase: 3.8, persistent: true,
     path: [[12.3, 22.4, 4, 'arms'], [22.85, 22.4, 0], [22.85, 14.1, 0], [25.3, 13.1, 0], [27, 13.1, 0], [29.6, 13.9, 0], [30.4, 12.8, 3, 'phone'], [29.6, 13.9, 0], [27, 13.1, 0], [25.3, 13.1, 0], [22.85, 14.1, 0], [22.85, 22.4, 0]],
     hey: 'Hi! Um, do you know how the printer works?',
