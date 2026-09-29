@@ -215,3 +215,37 @@ canvas#game:focus { outline: none; }
 .ladder li.past { color: #b7c0cb; }
 .ladder li.on { color: var(--espresso); font-weight: 600; }
 @media (max-height: 700px) { .rating-box { padding: 8px 12px; gap: 4px; } }
+
+/* The 3D view fades in once it's ready (never showing the shader warm-up frame). */
+canvas#game.fade-in { animation: canvas-in .6s ease-out; }
+@keyframes canvas-in { from { opacity: 0; } }
+
+/* ---------- Start screen hero: steaming cup logo, title, ticking clock, cinematic framing ---------- */
+.screen.start {
+  background:
+    radial-gradient(ellipse 60% 70% at 72% 45%, rgba(214, 162, 124, .10), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 70% 50%, transparent 55%, rgba(8, 11, 15, .55) 100%),
+    linear-gradient(90deg, rgba(13,17,22,.94) 0%, rgba(13,17,22,.84) 36%, rgba(13,17,22,.18) 60%, rgba(13,17,22,0) 100%);
+}
+.brand { display: flex; align-items: flex-end; gap: 16px; }
+.brand-cup { width: 58px; height: 76px; flex: none; margin-bottom: 4px; overflow: visible; }
+.brand-cup .sleeve-cup { fill: #efe6da; }
+.brand-cup .lid { fill: #3b2e24; }
+.brand-cup .sleeve { fill: var(--espresso); }
+.brand-cup .steam { fill: none; stroke: rgba(255, 255, 255, .55); stroke-width: 3; stroke-linecap: round; animation: steam 2.8s ease-in-out infinite; opacity: 0; }
+.brand-cup .s2 { animation-delay: .9s; }
+.brand-cup .s3 { animation-delay: 1.8s; }
+@keyframes steam { 0% { opacity: 0; transform: translateY(6px); } 35% { opacity: .8; } 100% { opacity: 0; transform: translateY(-10px); } }
+.brand .eyebrow { margin-bottom: 6px; }
+.screen.start h1 { line-height: .86; text-shadow: 0 6px 30px rgba(0, 0, 0, .35); }
+h1 em { font-style: normal; color: var(--espresso); }
+.clock-chip { display: inline-flex; align-self: flex-start; align-items: center; gap: 8px; margin: 0; padding: 6px 12px; border-radius: 999px; font: 500 13px var(--mono); color: #e7ebf0; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); }
+.clock-chip .rec { width: 8px; height: 8px; border-radius: 50%; background: var(--late); box-shadow: 0 0 10px rgba(255, 107, 107, .8); animation: pulse 1.2s ease-in-out infinite; }
+.clock-chip .blink { animation: blink 1s steps(1) infinite; }
+.clock-chip { gap: 6px; }
+.clock-chip .sep { color: var(--muted); }
+@keyframes blink { 50% { opacity: 0; } }
+@media (max-height: 700px) { .brand-cup { width: 44px; height: 58px; } .clock-chip { padding: 4px 10px; font-size: 12px; } }
+
+/* A warmer, punchier grade on the start screen's living lobby. */
+canvas#game.showcase { filter: saturate(1.15) contrast(1.06) brightness(.97); }

@@ -280,14 +280,35 @@ async function boot() {
     } else return;
     renderPicker();
   };
-  // Start screen: the chosen commuter stands in the lobby facing the camera, framed to the
-  // right of the picker; the lobby is the backdrop.
-  const STAGE = new THREE.Vector3(level.spawn.x, 0, level.spawn.z - 3);
+  // Start screen: the chosen commuter stands in the busy lobby with a coffee, framed to the
+  // right of the title. The office is already alive behind them: coworkers on their rounds,
+  // people arriving through the front doors and badging through the turnstiles. The camera
+  // drifts slowly round them. It all resets when you press Enter.
+  const STAGE = new THREE.Vector3(12.6, 0, level.spawn.z - 3);
   player.teleport(STAGE, Math.PI);
+  player.cup.visible = true;
+  let attractT = 0, attractAcc = 0, nextSip = 2.5;
+  const farProbe = new THREE.Vector3(-50, -50, -50);
+  const attract = (dt) => {
+    attractT += dt;
+    if (stealth) {
+      attractAcc = Math.min(attractAcc + dt, 0.25);
+      while (attractAcc >= STEP) {
+        stealth.update(STEP, { pos: player.position, crouching: false, hurrying: false, hidden: false, blending: false, riding: false, active: false }, {});
+        for (const d of level.doors) d.update(STEP, farProbe);
+        attractAcc -= STEP;
+      }
+      stealth.interpolate(1);
+    }
+    nextSip -= dt;
+    if (nextSip <= 0 && player.cup.visible) { player.sip(); nextSip = 4.5 + Math.random() * 2; }
+  };
   const selectCam = () => {
     const p = STAGE;
-    camera.position.set(p.x - 0.35, 1.45, p.z + 3.1);
-    camera.lookAt(p.x - 0.1, 1.0, p.z);
+    const a = Math.sin(attractT * 0.13) * 0.24;            // a slow sway round the character
+    const r = 3.15 + Math.sin(attractT * 0.09) * 0.2;
+    camera.position.set(p.x - 0.35 + Math.sin(a) * r, 1.4 + Math.sin(attractT * 0.11) * 0.08, p.z + Math.cos(a) * r);
+    camera.lookAt(p.x - 0.1, 1.05, p.z);
     const w = window.innerWidth, h = window.innerHeight;
     if (w > 720) camera.setViewOffset(w, h, -w * 0.2, 0, w, h); else camera.clearViewOffset();
   };
@@ -298,9 +319,10 @@ async function boot() {
     sfx.startMusic();
     camera.clearViewOffset();
     if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
-    if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
+    // (From the start screen too: the lobby has been running behind the title.)
+    game.reset(); resetNpcs();
+    canvas.classList.remove('showcase');
     camCtl.snap();
-    if (mode === 'end' || mode === 'paused') { game.reset(); resetNpcs(); }
     input.endFrame();                 // drop any keys pressed while a menu was open
     mode = 'playing';
     acc = 0;
@@ -349,11 +371,15 @@ async function boot() {
   canvas.addEventListener('webglcontextrestored', () => { dirty = true; });
 
   // ---------- Warm-up: compile every shader and upload every texture before play ----------
+  // The warm-up frame shows everyone at once in their rest pose (arms out): keep the canvas
+  // hidden until the first real frame, which fades in.
+  canvas.style.visibility = 'hidden';
   placeSun(0, level.spawn.x, level.spawn.z);
+  animateCharacters(0);                        // everyone into their idle pose now
   camCtl.update(0, player);
   // Put the other commuter on stage for a moment so every character shader is compiled now.
   const spare = KINDS.map((k) => choices[k]).find((c) => c && c !== player.char);
-  if (spare) { spare.root.position.set(level.spawn.x + 1.5, 0, level.spawn.z - 2); scene.add(spare.root); }
+  if (spare) { spare.root.position.set(level.spawn.x + 1.5, 0, level.spawn.z - 2); spare.update(0); scene.add(spare.root); }
   // Coworker labels, sight cones and X-ray beacons are normally hidden: show them for the compile.
   stealth?.warmup(true);
   beacons.warmup(true);
@@ -409,12 +435,16 @@ async function boot() {
       if (mode === 'playing') { game.updateHud(dt); sounds(dt); }
       mirrorCheck();
       renderer.render(scene, camera);
+      if (canvas.style.visibility === 'hidden') canvas.style.visibility = '';
       adaptQuality(raw);
     } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
       // Menus with a living character behind them keep animating.
+      if (mode === 'start' && ready) attract(dt);
       animateCharacters(dt);
       if (mode === 'start') selectCam(); else endCam(dt);
       renderer.render(scene, camera);
+      if (canvas.style.visibility === 'hidden') { canvas.style.visibility = ''; canvas.classList.add('fade-in'); }
+      canvas.classList.toggle('showcase', mode === 'start');
     } else if (dirty && !noticeOnly) {
       camCtl.update(dt, player);
       renderer.render(scene, camera);
@@ -475,7 +505,7 @@ async function boot() {
   function animateCharacters(dt) {
     level.decor?.update(dt);
     player.animate(dt);
-    stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' || mode === 'end' });
+    stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' || mode === 'end', showcase: mode === 'start' && ready });
     beacons.update(dt, player.floor);
     const label = game.busy?.label || '';
     const p = player.renderPos;

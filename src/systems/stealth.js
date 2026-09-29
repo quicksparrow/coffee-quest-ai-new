@@ -779,11 +779,12 @@ export class Stealth {
     }
   }
 
-  animate(dt, { playerPos, playerFloor, playing: live }) {
+  // showcase: the start screen, where everyone wears their name tag and sight cone.
+  animate(dt, { playerPos, playerFloor, playing: live, showcase = false }) {
     this.tickReaction(dt);
     for (const cw of this.everyone) {
       // Once you're in 2B, only the people in the room keep their labels.
-      const playing = live && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
+      const playing = (live || showcase) && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
       if (cw.attendee) { cw.group.position.copy(cw.pos); cw.group.rotation.y = cw.yaw; }
       if ((cw.scripted || cw.isRider) && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; cw.group.visible = false; continue; }
       if (cw.commuter || cw === this.smoker) cw.char.setFade?.(cw.fade ?? 1);
@@ -810,7 +811,7 @@ export class Stealth {
       // Labels stack above the head in screen space (they keep a constant size on screen, so
       // the stacking uses each sprite's anchor rather than world-space offsets).
       const gx = cw.group.position.x, gz = cw.group.position.z, top = cw.group.position.y + 2.05;
-      const showTag = playing && same && (d < 10 || this.xray);
+      const showTag = playing && same && (d < 10 || this.xray || showcase);
       cw.tag.position.set(gx, top, gz);
       cw.tag.center.set(0.5, 0);
       cw.tag.visible = true;
@@ -833,7 +834,7 @@ export class Stealth {
         cw.bubble.center.set(0.5, -below / cw.bubble.scale.y);
         cw.bubble.material.opacity = 1;
       }
-      if (cw.cone) this.drawCone(cw, same && this.xray && playing);
+      if (cw.cone) this.drawCone(cw, same && (this.xray || showcase) && playing);
     }
   }
 
