@@ -204,7 +204,8 @@ async function boot() {
       });
       $('end-score').textContent = r.total.toLocaleString('en-US');
       // Let the room react first (a few seconds of speech bubbles), then the score card.
-      setTimeout(() => { if (mode === 'end') showScreen('end'); }, 4200);
+      // (endCam shows the card once the reactions have played; this is only a fallback.)
+      setTimeout(() => { if (mode === 'end') showScreen('end'); }, 12000);
     },
   });
 
@@ -361,6 +362,8 @@ async function boot() {
     // A beat on the follow camera as you step in, then a cut to the room (a camera move
     // would pass through the wall).
     endBlend += dt;
+    // Score card after the last line has had time to be read (about 6.5 s of reactions).
+    if ($('end').hidden && (stealth?.reaction ? stealth.reaction.t > 6.4 : endBlend > 6.4)) showScreen('end');
     if (endBlend < 0.35) { camCtl.update(dt, player); return; }
     const drift = Math.min(1, (endBlend - 0.35) / 4);           // slow push-in while they talk
     camera.position.copy(END_POS).lerp(END_LOOK, drift * 0.12);

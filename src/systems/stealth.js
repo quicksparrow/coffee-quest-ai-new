@@ -60,10 +60,21 @@ const CAST = [
   },
   {
     id: 'monica', name: 'Monica', role: 'Manager', kind: 'woman', y: F2, look: look('Burgundy', 'Medium', 'Brown'),
+    meetingSpot: [7.3, 19.2], meetingYaw: Math.PI / 2,
     speed: 1.55, cone: 22, range: 11, sense: 1.1, talk: 20, chase: 4.1,
     path: [[10.6, 17.8, 2, 'phone'], [10.6, 22.3, 0], [17.2, 22.3, 2, 'arms'], [10.6, 22.3, 0]],
     hey: 'Oh good, you are here. Quick question!',
     lines: ['Could you own the Q3 deck?', 'Just a few slides. Maybe forty.', 'Loop in legal. And finance.', 'Great, let us circle back after the call.'],
+  },
+  {
+    // HR. Walking fast in the office is against the handbook, so she notices hurrying from
+    // twice as far off. Joins the call at nine, clipboard ready.
+    id: 'karen', name: 'Karen', role: 'HR', kind: 'woman', y: F2, look: look('Plum', 'Fair', 'Brown'),
+    speed: 1.2, cone: 50, range: 8, sense: 1, hurrySense: 3, talk: 14, chase: 3.8,
+    path: [[27.5, 18.4, 3, 'phone'], [27.5, 23, 0], [23.9, 23.3, 2.5, 'arms'], [24.9, 16.5, 0]],
+    meetingSpot: [6.6, 23.0], meetingYaw: Math.PI * 0.75,
+    hey: 'Walking, please. It is in the handbook.',
+    lines: ['Your compliance training is overdue.', 'It is only nine modules.', 'Also, we do not microwave fish.', 'I will send a calendar invite. Mandatory.'],
   },
   {
     id: 'josh', name: 'Josh', role: 'Intern', kind: 'man', y: F2, look: look('Lilac', 'Medium', 'Brown'),
@@ -85,7 +96,7 @@ const ATTENDEES = [
 ];
 // Where Monica goes at 9:00: to the door of 2B, then inside.
 const MEETING_DOOR = new THREE.Vector3(10.4, F2, 21);
-const MEETING_SPOTS = [new THREE.Vector3(8.1, F2, 21), new THREE.Vector3(7.3, F2, 19.2)];
+const MEETING_INSIDE = new THREE.Vector3(8.1, F2, 21);
 
 const tmpV = new THREE.Vector3();
 
@@ -156,6 +167,8 @@ export class Stealth {
     });
     this.everyone = [...this.list, this.smoker, ...this.attendees];
     this.monica = this.list.find((c) => c.def.id === 'monica');
+    this.karen = this.list.find((c) => c.def.id === 'karen');
+    this.joiners = this.list.filter((c) => c.def.meetingSpot);   // they head into 2B at nine
     this.sightPredicate = (c) => !this.seeThrough.has(c.handle);
     this.reset();
   }
@@ -237,34 +250,43 @@ export class Stealth {
     this.level.state.npcDoor = false;
   }
 
-  // ---------- 9:00: Monica heads into the call ----------
+  // ---------- 9:00: Monica and Karen head into the call ----------
   callToMeeting() { this.meetingCalled = true; }
 
-  sendMonica() {
-    const m = this.monica;
+  sendToMeeting(m) {
     m.state = 'toMeeting';
     m.sus = 0;
-    m.route = [...(m.nav.find(m.pos, MEETING_DOOR) || [MEETING_DOOR.clone()]), ...MEETING_SPOTS.map((p) => p.clone())];
-    m.say = 'Oh! Nine o\'clock. Gotta run.'; m.sayT = 2.4;
+    const spot = new THREE.Vector3(m.def.meetingSpot[0], F2, m.def.meetingSpot[1]);
+    m.route = [...(m.nav.find(m.pos, MEETING_DOOR) || [MEETING_DOOR.clone()]), MEETING_INSIDE.clone(), spot];
+    m.say = m === this.karen ? 'Nine o\'clock. Time to take notes.' : 'Oh! Nine o\'clock. Gotta run.'; m.sayT = 2.4;
   }
 
   // ---------- Walking into 2B ----------
-  // Who says what when you arrive. Returns the quote for the end screen.
-  react({ late, cups, lastTalker }) {
+  // Who says what when you arrive (about six seconds of it). Returns the quote for the end screen.
+  react({ late, lateBy = 0, cups, lastTalker, chats = 0, sips = 0 }) {
     const [linda, sam] = this.attendees;
-    const monicaIn = this.monica.state === 'inMeeting';
+    const monica = this.monica.state === 'inMeeting' ? this.monica : null;
+    const karen = this.karen.state === 'inMeeting' ? this.karen : null;
+    const pick = (...xs) => xs[Math.floor(Math.random() * xs.length)];
     const seq = [];
+    const at = [0.3, 1.5, 2.7, 3.9, 5.1];
+    const say = (who, text, anim = null) => seq.push([at[seq.length], who, text, anim]);
     if (!late) {
-      seq.push([0.3, linda, cups >= 5 ? 'Right on time, and nobody even saw you. Impressive.' : 'Right on time. Love that.', 'cheer']);
-      seq.push([1.5, sam, lastTalker ? `You got away from ${lastTalker}? Legend.` : cups >= 4 ? 'Coffee AND on time? Who are you?' : 'See? Told them you would make it.', null]);
+      say(linda, cups >= 5 ? 'Right on time, and nobody even saw you come in. Impressive.' : pick('Right on time. Love that.', 'And there they are. Right on time.'), 'cheer');
+      say(sam, lastTalker ? `You got away from ${lastTalker}? Legend.` : cups >= 4 ? 'Coffee AND on time? Who are you?' : 'See? Told them you would make it.');
+      say(linda, pick('Perfect. You can take the notes.', 'Great, let us kick off with a quick icebreaker.', 'Since you are early, you can share your screen.'), 'talk');
+      say(sam, pick('Rookie mistake, being on time.', '...we are doing icebreakers?', 'Save me some of that coffee.'));
+      if (sips === 0) say(linda, 'Are you... not going to drink that?', 'arms');
     } else {
-      seq.push([0.3, linda, 'Oh good. You could join us.', 'arms']);
-      seq.push([1.5, sam, lastTalker ? `Let me guess. ${lastTalker}?` : 'We started without you...', null]);
-      if (monicaIn) seq.push([2.6, this.monica, 'Per my calendar invite, this started at nine.', 'arms']);
-      else seq.push([2.6, linda, 'No, no. We will just go back to slide one.', 'arms']);
+      say(linda, lateBy > 20 ? 'Oh! We thought you quit.' : 'Oh good. You could join us.', 'arms');
+      say(sam, lastTalker ? `Let me guess. ${lastTalker}?` : chats ? 'Let me guess. Somebody had a quick question?' : 'We started without you...');
+      say(monica || linda, monica ? 'Per my calendar invite, this started at nine.' : 'No, no. We will just go back to slide one. For you.', 'arms');
+      say(karen || linda, karen ? 'I will just make a note of that. For your file.' : 'Since you are here, you can take the minutes.', karen ? 'phone' : 'arms');
+      say(linda, 'Nice coffee, though. Did you bring enough for everyone?', 'arms');
     }
     this.reaction = { t: 0, seq };
-    return late ? '"Oh good. You could join us." Linda, VP' : `"${seq[0][2]}" Linda, VP`;
+    const first = seq[0][2];
+    return late ? `"${first}" Linda, VP` : `"${first}" Linda, VP`;
   }
 
   tickReaction(dt) {
@@ -280,7 +302,7 @@ export class Stealth {
       const P = this.player.renderPos;
       if (!cw.def.pose || cw.def.pose !== 'sit') cw.yaw = cw.prevYaw = yawTo(P.x - cw.pos.x, P.z - cw.pos.z);
     }
-    for (const cw of this.attendees.concat(this.monica)) cw.sayT = Math.max(0, cw.sayT - (cw.say && cw.sayT < 90 ? dt : 0));
+    for (const cw of this.attendees.concat(this.joiners)) cw.sayT = Math.max(0, cw.sayT - (cw.say && cw.sayT < 90 ? dt : 0));
   }
 
   beginLeg(cw) { cw.route = cw.legs[cw.stop].map((p) => p.clone()); }
@@ -351,8 +373,10 @@ export class Stealth {
     this.grace = Math.max(0, this.grace - dt);
     this.updateSmoker(dt);
     if (this.conversation) this.updateConversation(dt, events);
-    const m = this.monica;
-    if (this.meetingCalled && !['talk', 'toMeeting', 'inMeeting'].includes(m.state)) this.sendMonica();
+    for (const m of this.joiners) {
+      if (this.meetingCalled && !['talk', 'toMeeting', 'inMeeting'].includes(m.state)) this.sendToMeeting(m);
+    }
+    this.level.state.npcDoor = this.joiners.some((m) => m.state === 'toMeeting' && Math.hypot(m.pos.x - 9, m.pos.z - 21) < 2.6);
     for (const cw of this.list) {
       cw.prev.copy(cw.pos);
       cw.prevYaw = cw.yaw;
@@ -360,14 +384,13 @@ export class Stealth {
       cw.sayT = Math.max(0, cw.sayT - dt);
       if (cw.state === 'talk') { this.placeBody(cw); continue; }
       if (cw.state === 'toMeeting') {
-        this.level.state.npcDoor = Math.hypot(cw.pos.x - 9, cw.pos.z - 21) < 2.6;
-        if (this.walk(cw, dt, cw.def.speed * 1.3, null)) { cw.state = 'inMeeting'; this.level.state.npcDoor = false; }
+        if (this.walk(cw, dt, cw.def.speed * 1.3, null)) cw.state = 'inMeeting';
         this.placeBody(cw);
         continue;
       }
       if (cw.state === 'inMeeting') {
         cw.moving = false;
-        cw.yaw += angleDiff(Math.PI / 2, cw.yaw) * Math.min(1, dt * 4);   // facing the screen
+        cw.yaw += angleDiff(cw.def.meetingYaw, cw.yaw) * Math.min(1, dt * 4);   // facing the screen
         this.placeBody(cw);
         continue;
       }
@@ -382,7 +405,7 @@ export class Stealth {
           const d = edge ? seenD - 100 : seenD;
           let rate = 1.25 * cw.def.sense * (1 - 0.6 * (d / cw.def.range));
           if (P.crouching) rate *= 0.35;
-          if (P.hurrying) rate *= 1.6;
+          if (P.hurrying) rate *= cw.def.hurrySense || 1.6;
           if (P.blending) rate *= 0.15;          // waiting in a line: just another customer
           if (edge) rate *= 0.6;
           cw.sus = Math.min(1, cw.sus + rate * dt);

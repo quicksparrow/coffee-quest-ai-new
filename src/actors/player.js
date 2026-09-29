@@ -157,10 +157,11 @@ export class Player {
       c.current.timeScale = clipSpeed ? THREE.MathUtils.clamp(this.speed / clipSpeed, 0.5, 2.2) : 1;
     }
     c.update(dt);
-    if (this.sipT > 0) {
-      this.sipT += dt;
-      if (!c.applySip(this.sipT, this.cup)) this.sipT = 0;
-    }
+    // Holding a coffee: carry it steady, and lift it to the lips when sipping.
+    if (this.cup.visible) {
+      if (this.sipT > 0) this.sipT += dt;
+      if (!c.holdCup(this.cup, this.sipT)) this.sipT = 0;
+    } else this.sipT = 0;
   }
 
   // Latest physics position (feet). Shared vector: read it, don't modify it.

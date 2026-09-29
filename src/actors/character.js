@@ -21,6 +21,7 @@ export const OUTFITS = [
   { name: 'Charcoal', color: 0x55595f },
   { name: 'Olive', color: 0x7d7a3a },
   { name: 'Slate', color: 0x6f8296 },
+  { name: 'Plum', color: 0x6b3f6e },
 ];
 const O = Object.fromEntries(OUTFITS.map((o, i) => [o.name, i]));
 // Skin tones are a tint over the base skin texture (the pack's two textures are nearly identical).
@@ -290,47 +291,54 @@ export class Character {
     }
   }
 
-  // t: seconds into the sip. Returns false once the sip is over.
-  applySip(t, cup) {
+  // Holding the coffee: the left arm is placed with IK every frame, like a real person carrying
+  // a cup (elbow bent, cup upright in front of the hip) instead of swinging it. Sipping lifts it
+  // to the lips on a small forward arc, the cup tips back, then it comes back down.
+  // sipT: seconds into a sip (0 = not sipping). Returns false once a sip is over.
+  holdCup(cup, sipT = 0) {
     const D = SIP.up + SIP.hold + SIP.down;
-    if (t >= D) return false;
+    const sipping = sipT > 0 && sipT < D;
+    const t = sipping ? sipT : 0;
     const ease = (x) => x * x * (3 - 2 * x);
-    const lift = t < SIP.up ? ease(t / SIP.up) : t < SIP.up + SIP.hold ? 1 : ease(1 - (t - SIP.up - SIP.hold) / SIP.down);
-    const drink = t < SIP.up ? 0 : Math.min(1, (t - SIP.up) / SIP.hold);      // how far the cup tips back
-    // Borrow the clip's grip and head tilt from its "at the mouth" moment.
+    const lift = !sipping ? 0 : t < SIP.up ? ease(t / SIP.up) : t < SIP.up + SIP.hold ? 1 : ease(1 - (t - SIP.up - SIP.hold) / SIP.down);
+    const drink = !sipping || t < SIP.up ? 0 : Math.min(1, (t - SIP.up) / SIP.hold);
+    // Grip (fingers) always; the head tips a little while drinking.
     this.applySipPose(0.3 + 0.2 * lift, lift);
-    if (!cup) return true;
-    const { upper, lower, hand, v, q, m } = this.ik;
+    const { v, q, m } = this.ik;
     this.root.updateMatrixWorld(true);
-    const [fwd, up, left, mouth, from, to, cupPos] = v;
+    const [fwd, up, left, mouth, carry, to, cupPos, cupUp, tmp, wrist] = v;
     this.root.getWorldQuaternion(q[0]);
     fwd.set(0, 0, 1).applyQuaternion(q[0]);
     up.set(0, 1, 0).applyQuaternion(q[0]);
     left.set(1, 0, 0).applyQuaternion(q[0]);
+    // Carry: in front of the left hip, cup upright, hand on the outside of the cup.
+    this.bones.pelvis.getWorldPosition(carry).addScaledVector(up, 0.14).addScaledVector(fwd, 0.3).addScaledVector(left, 0.17);
+    // Sip: lid at the lips, tipped back as you drink.
     const k = SIP[this.kind];
     this.head.getWorldPosition(mouth).addScaledVector(up, k.mouthUp).addScaledVector(fwd, k.mouthFwd);
-    // Where the cup is now (arm swinging with the walk) -> just below the lips, on a forward arc.
-    cup.getWorldPosition(from);
-    const tilt = THREE.MathUtils.degToRad(12 + 38 * drink);
-    const cupUp = v[7].copy(up).multiplyScalar(Math.cos(tilt)).addScaledVector(fwd, -Math.sin(tilt));
-    to.copy(mouth).addScaledVector(cupUp, -0.075).addScaledVector(fwd, 0.035).addScaledVector(left, 0.015);
-    cupPos.lerpVectors(from, to, lift).addScaledVector(fwd, 0.12 * Math.sin(Math.PI * lift) * (1 - drink));
-    // Cup orientation: facing the character's way, then tipped back toward the face.
-    const upright = q[1].copy(q[0]);
-    const tip = q[2].setFromAxisAngle(left, -tilt);
-    const cupWant = tip.multiply(upright);
-    cup.getWorldQuaternion(q[3]).slerp(cupWant, lift);
-    // Hand transform that puts the cup there (cup = hand * cupLocal).
-    const cupScale = cup.getWorldScale(v[8]);
+    const tilt = THREE.MathUtils.degToRad(40 * drink);
+    cupUp.copy(up).multiplyScalar(Math.cos(tilt)).addScaledVector(fwd, -Math.sin(tilt));
+    to.copy(mouth).addScaledVector(cupUp, -0.075).addScaledVector(fwd, 0.03).addScaledVector(left, 0.01);
+    cupPos.lerpVectors(carry, to, lift).addScaledVector(fwd, 0.1 * Math.sin(Math.PI * lift) * (1 - drink));
+    // Cup orientation from its axis (up) and the direction of the hand holding it (outside,
+    // slightly toward the body while carrying).
+    const handSide = tmp.copy(left).multiplyScalar(0.9).addScaledVector(fwd, -0.25 * (1 - lift)).normalize();
+    const Y = cupUp.clone().lerp(up, 1 - lift).normalize();
+    const Z = handSide.addScaledVector(Y, -handSide.dot(Y)).normalize();
+    const X = new THREE.Vector3().crossVectors(Y, Z);
+    q[3].setFromRotationMatrix(m[0].makeBasis(X, Y, Z));
+    // Hand transform that puts the cup there (cup = hand * cupLocal), then reach for it.
+    const cupScale = cup.getWorldScale(new THREE.Vector3());
     m[0].compose(cupPos, q[3], cupScale).multiply(m[1].copy(cup.matrix).invert());
-    const wrist = v[9].setFromMatrixPosition(m[0]);
-    const handQ = q[3].setFromRotationMatrix(m[1].extractRotation(m[0]));
-    this.solveArm(wrist, handQ);
-    return true;
+    wrist.setFromMatrixPosition(m[0]);
+    const handQ = q[2].setFromRotationMatrix(m[1].extractRotation(m[0]));
+    const pole = new THREE.Vector3(0.35, -1, -0.8).lerp(new THREE.Vector3(0.45, -1, 0.35), lift);
+    this.solveArm(wrist, handQ, pole);
+    return sipping;
   }
 
   // Two-bone IK for the left arm: shoulder -> elbow -> wrist, elbow pointing down and out.
-  solveArm(target, handQ) {
+  solveArm(target, handQ, poleModel = new THREE.Vector3(0.9, -1, -0.35)) {
     const { upper, lower, hand } = this.ik;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     upper.getWorldPosition(a); lower.getWorldPosition(b); hand.getWorldPosition(c);
@@ -339,7 +347,7 @@ export class Character {
     const d = THREE.MathUtils.clamp(toT.length(), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3);
     const dir = toT.normalize();
     const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
-    const pole = new THREE.Vector3(0.9, -1, -0.35).applyQuaternion(rq);   // out to the left, down, a bit back
+    const pole = poleModel.clone().applyQuaternion(rq);   // where the elbow points (model space)
     pole.addScaledVector(dir, -pole.dot(dir)).normalize();
     const cosA = THREE.MathUtils.clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
     const elbow = a.clone().addScaledVector(dir, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));
@@ -361,23 +369,28 @@ export class Character {
     hand.updateMatrixWorld(true);
   }
 
-  // Put a held object (the coffee cup) in the left hand, upright when the arm hangs at rest.
+  // Put the coffee cup in the left hand, held the way people hold a cup: fingers round it,
+  // index finger and thumb on top, so the cup's axis runs across the hand (pinky to index).
   attachToLeftHand(obj) {
-    const hand = this.bones.hand_l, mid = this.bones.middle_01_l, thumb = this.bones.thumb_01_l;
+    const b = this.bones;
     this.mixer.stopAllAction();
     this.applySipPose(0, 1, true);
     this.root.updateMatrixWorld(true);
-    const h = hand.getWorldPosition(new THREE.Vector3());
-    const m = mid.getWorldPosition(new THREE.Vector3());
-    const t = thumb.getWorldPosition(new THREE.Vector3());
-    const world = new THREE.Matrix4().compose(
-      h.clone().lerp(m, 0.9).lerp(t, 0.35),
-      this.root.getWorldQuaternion(new THREE.Quaternion()),
-      new THREE.Vector3(1, 1, 1),
-    );
+    const P = (bone) => bone.getWorldPosition(new THREE.Vector3());
+    const H = P(b.hand_l), M = P(b.middle_01_l), I = P(b.index_01_l), K = P(b.pinky_01_l), tip = P(b.middle_03_l);
+    const along = M.clone().sub(H).normalize();
+    const across = I.clone().sub(K).normalize();                // pinky -> index: the cup's up
+    const palm = new THREE.Vector3().crossVectors(along, across).normalize();
+    if (tip.clone().sub(M).dot(palm) < 0) palm.negate();          // palm side = where the fingers curl
+    const Y = across;
+    const Z = palm.clone().negate();                               // from the cup toward the palm
+    Z.addScaledVector(Y, -Z.dot(Y)).normalize();
+    const X = new THREE.Vector3().crossVectors(Y, Z);
+    const center = H.clone().lerp(M, 0.75).addScaledVector(palm, 0.058).addScaledVector(Y, -0.01);
+    const world = new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(center);
     obj.matrixAutoUpdate = true;
-    new THREE.Matrix4().copy(hand.matrixWorld).invert().multiply(world).decompose(obj.position, obj.quaternion, obj.scale);
-    hand.add(obj);
+    new THREE.Matrix4().copy(b.hand_l.matrixWorld).invert().multiply(world).decompose(obj.position, obj.quaternion, obj.scale);
+    b.hand_l.add(obj);
     this.current = null;
     this.play('idle', 0);
   }

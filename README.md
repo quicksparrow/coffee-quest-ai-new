@@ -36,7 +36,7 @@ The start screen lets you play as **Claire** (blonde, blue blouse) or **Steven**
 
 Get a coffee, then walk into Meeting 2B on Floor 2. The clock starts at 08:55 and runs three times as fast as real time, so you have 100 seconds. Arriving after 09:00 is allowed but costs points, and the room lets you know it.
 
-Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, is at the table. When you walk in the camera cuts to the room and they react: "Right on time. Love that." if you made it, "Oh good. You could join us." if you didn't. At 9:00 Monica stops patrolling and heads into the call, so she's there to remind you when it started.
+Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, is at the table. When you walk in the camera cuts to the room and they react: "Right on time. Love that." if you made it, "Oh good. You could join us." if you didn't. At 9:00 Monica and Karen stop patrolling and head into the call. Arrive late and the whole room piles on for about six seconds ("Oh! We thought you quit.", "Per my calendar invite, this started at nine.", "I will just make a note of that. For your file.") before the score card.
 
 - Lobby café latte or the kitchen espresso upstairs, as many as you like: finish your cup and grab another. Dana at reception and Leo at the café have name tags and turn to greet you.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
@@ -46,7 +46,7 @@ Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, 
 
 ## Coworkers
 
-Six chatty coworkers walk their routes: Pat (Accounting) and Tom (Sales) in the lobby, and Priya (IT), Dave (the Storyteller), Monica (the "quick question" manager) and Josh (the intern) upstairs. Each looks where they're walking. While you're inside someone's cone of sight and in plain view, a meter over their head fills: faster up close or when you sprint, slower when you crouch or wait in a line. When it fills they call out and come over; walk into them, or let them catch up, and you're stuck chatting (it costs time and 300 points; tap Space to excuse yourself sooner).
+Seven chatty coworkers walk their routes: Pat (Accounting) and Tom (Sales) in the lobby, and Priya (IT), Dave (the Storyteller), Monica (the "quick question" manager), Karen (HR) and Josh (the intern) upstairs. Karen patrols the lounge and phone pods and notices hurrying from much farther away: walking fast is against the handbook. Each looks where they're walking. While you're inside someone's cone of sight and in plain view, a meter over their head fills: faster up close or when you sprint, slower when you crouch or wait in a line. When it fills they call out and come over; walk into them, or let them catch up, and you're stuck chatting (it costs time and 300 points; tap Space to excuse yourself sooner).
 
 - Walls, closed doors and, when you crouch, the cubicle partitions block their view.
 - Break line of sight and most people give up. Hiding always works (+100): the two phone pods, the supply closet and the lobby plants. Josh the intern won't give up until you hide.
@@ -86,7 +86,7 @@ src/ui/                 HUD updates, name tags, speech bubbles and meters
 
 ## Characters
 
-Claire, Steven, the lobby staff and the coworkers use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and sipping lifts the cup to the lips with two-bone arm IK (the pack's drink clip only reaches the side of the face), so you can sip while walking.
+Claire, Steven, the lobby staff and the coworkers use Quaternius's **Universal Base Characters** and **Universal Animation Library** (both CC0, free for commercial use, https://quaternius.com). The base bodies ship undressed, so the office clothes (shoes, trousers, belt, shirt or blouse, collar, tie) are painted on in a shader from each vertex's rest-pose height (`src/actors/character.js`). Walking, hurrying and crouching play at a speed matched to movement so feet don't slide, and the coffee is carried and sipped with two-bone arm IK: the cup rides upright in front of the hip with the fingers round it, and sipping lifts it to the lips and tips it back (the pack's drink clip only reaches the side of the face), so you can sip while walking.
 
 `public/models/` holds the web-ready files. The game downloads them with a plain request and decodes their textures directly from the file, so it doesn't depend on `blob:` or `data:` addresses that strict hosts block; if they ever fail to load, the start screen says why and you play as a stand-in. For hosts that can't serve `.glb` files at all, `VITE_MODELS=embed npm run build` bakes the models into the JavaScript instead. `tools/build-characters.mjs` rebuilds them from the source packs (needs `npm i -D @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions sharp`).
 
