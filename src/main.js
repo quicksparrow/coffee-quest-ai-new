@@ -161,21 +161,6 @@ async function boot() {
     console.error('Coworkers failed to start', err);
   }
   const beacons = new Beacons(scene, level, state);
-  // Finale captions: each line the room says appears at the bottom, newest last.
-  if (stealth) {
-    stealth.onLine = (name, role, text) => {
-      const box = $('captions');
-      [...box.children].forEach((c) => c.classList.add('old'));
-      const d = document.createElement('div');
-      d.className = 'cap';
-      d.innerHTML = '<b></b><span class="role"></span><span></span>';
-      d.children[0].textContent = name;
-      d.children[1].textContent = role;
-      d.children[2].textContent = text;
-      box.appendChild(d);
-      while (box.children.length > 3) box.firstChild.remove();
-    };
-  }
 
   const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xd6a27c }));
   marker.renderOrder = 10;
@@ -205,18 +190,7 @@ async function boot() {
       hud.show(false);                 // the room reacts first, full screen
       $('end-eyebrow').textContent = `Arrived ${r.arrived}`;
       $('end-title').textContent = r.late ? 'Late, but you made it' : 'Right on time';
-      $('end-line').textContent = r.late ? 'Everyone saw you walk in.' : 'Nobody suspects the coffee run.';
-      // Everything the room said, in order, so no line is missed.
-      $('end-transcript').innerHTML = '';
-      (r.lines || []).forEach((l) => {
-        const d = document.createElement('div');
-        d.innerHTML = '<b></b><span></span>';
-        d.firstChild.textContent = l.name;
-        d.lastChild.textContent = l.text;
-        $('end-transcript').appendChild(d);
-      });
-      $('captions').innerHTML = '';
-      $('captions').hidden = false;
+      $('end-line').textContent = r.quote || (r.late ? 'Everyone saw you walk in.' : 'Nobody suspects the coffee run.');
       $('end-rating').textContent = `${r.cups} cup${r.cups > 1 ? 's' : ''} · ${r.rating}`;
       const cup = (full) => `<svg class="cup${full ? ' full' : ''}" viewBox="0 0 40 40"><path class="body" d="M8 12 H28 L26 34 H10 Z"/><path class="handle" d="M28 16 C36 16 36 26 27 26"/></svg>`;
       $('end-cups').innerHTML = [1, 2, 3, 4, 5].map((i) => cup(i <= r.cups)).join('');
@@ -268,7 +242,6 @@ async function boot() {
   const startGame = () => {
     sfx.unlock();
     camera.clearViewOffset();
-    $('captions').hidden = true;
     if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
     camCtl.snap();
@@ -386,7 +359,7 @@ async function boot() {
   let endBlend = 0;
   const endLook = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
-  const showEndCard = () => { $('captions').hidden = true; showScreen('end'); };
+  const showEndCard = () => showScreen('end');
   function endCam(dt) {
     if (!game.inMeeting) { camCtl.update(dt, player); return; }
     // A beat on the follow camera as you step in, then a cut to the room (a camera move
