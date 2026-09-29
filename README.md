@@ -39,10 +39,12 @@ Get a coffee, then walk into Meeting 2B on Floor 2. The clock starts at 08:55 an
 Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, is at the table. At 9:00 Monica and Karen stop patrolling and head into the call too. When you walk in, the camera cuts to the room and you get two lines in speech bubbles over people's heads (about five seconds) before the score card. On time: "Right on time. Love that." from Linda, then a quip from Sam. Late: "Oh good. You could join us." (or "Oh! We thought you quit." if you're very late), then Monica ("Per my calendar invite, this started at nine."), Karen ("I'll just make a note of that. For your file.") or Sam. The camera widens its lens to fit everyone in the room, so it works in narrow windows too.
 
 - Lobby café latte or the kitchen espresso upstairs, as many as you like: finish your cup and grab another. Dana at reception and Leo at the café have name tags and turn to greet you.
-- Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
-- The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
+- Past the badge turnstiles: a visitor pass from reception, the propped mailroom door to the service stairs, or tailgating. Ben from Finance comes in the front door every 17 seconds or so and badges through the second gate from the right; his gate stays open a moment after him, so stick close and walk through behind him.
+- The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away. Sometimes (4 rounds in 10, once per round) Gary from Facilities is already in the car when the doors open. Step in and he talks at you all the way up; let the doors close and call it again, or take the stairs.
 - The stairs (signposted from the lobby) are one straight flight, walled in on both sides, ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
-- Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it.
+- Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it. Besides the main door on its east side there's a narrow back door on its north side, off the open office.
+
+Route bonuses (each once per round): tailgating the turnstiles behind Ben +250, the mailroom shortcut +150, slipping in behind Rita at the stair door +250, and walking into 2B through the back door +300. Other scoring: first coffee +500, a second kind of coffee +750, refills +100, sips +150 each, visitor pass +150, slipping away from someone +100, each conversation -300, never pulled into one +2000, time to spare +20 per real second, late -40 per real second.
 
 ## Coworkers
 

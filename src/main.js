@@ -167,6 +167,8 @@ async function boot() {
   let stealth = null;
   try {
     stealth = new Stealth({ scene, world, R: RAPIER, assets: charAssets, player, level });
+    // Ben's badge beep, if you're near enough to hear it.
+    stealth.onBadge = () => { const q = player.position; if (q.y < 2 && Math.hypot(q.x - 13, q.z - 11) < 12) sfx.beep(); };
   } catch (err) {
     console.error('Coworkers failed to start', err);
   }

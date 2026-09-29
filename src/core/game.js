@@ -12,13 +12,15 @@ const ACTION_BUFFER = 0.15; // a Space press is remembered briefly, so pressing 
 
 const HINTS = {
   start: "Call's at 9:00 in Meeting 2B, Floor 2. Don't show up without coffee!",
-  turnstile: "No badge again? Ask reception for a visitor pass. Or sneak round through the mailroom, that door is always propped open.",
+  turnstile: "No badge again? Ask reception for a visitor pass, sneak round through the mailroom (that door is always propped open), or stick close behind Ben from Finance when he badges through.",
+  tailgate: 'Tailgated! Ben never even noticed.',
+  rider: "Gary from Facilities is in the elevator. Step in and you're stuck chatting all the way up. Let the doors close and call it again, or take the stairs.",
   visitor: 'Visitor pass works on the turnstiles and the elevators. Not on the doors upstairs, though.',
   coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost. Finished it? Grab another, as many as you like.',
   spill: 'Careful! Hurrying spills your coffee.',
   stairdoor: "That door needs a badge. Someone's about to step out for a smoke. Wait right by it and walk in after them.",
   elevator: 'Just step in and wait, it goes on its own. Or press Space to leave right away.',
-  floor2: "You're up! 2B is in the far corner, right across the open office.",
+  floor2: "You're up! 2B is in the far corner, right across the open office. There's a back door on its north side, too.",
   nocoffee: "You can't walk in empty-handed. Coffee first!",
   xray: 'Pro tip: hold X to see through walls: who is around, where they are looking, coffee and hiding spots.',
   hidden: "You're hidden. Wait for them to walk past, then press Space to step out.",
@@ -67,6 +69,9 @@ export class Game {
     this.lastTalker = null;
     this.called = false;
     this.inMeetingNoCoffee = false;
+    this.routes = new Set();          // route bonuses already scored this round
+    this.lastPos = null;
+    this.elDoorsWere = this.level.elevator.doorsOpen;
     this.tut = { i: 0, t: 0 };
     this.stats = { moved: false, turned: false, aboutFaced: false, hurried: false, crouched: false, xray: false };
     this.over = false;
@@ -288,6 +293,9 @@ export class Game {
     const ev = el.update(dt, p, this.level.landingDoors);
     if (ev.arrived) { this.sfx.ding(); if (ev.inside && el.floor === 1) this.hint('floor2'); }
     if (ev.inside && el.phase === 'idle' && el.doorsOpen && el.floor === 0) this.hint('elevator');
+    // The doors opening for you (not with you inside): sometimes Gary is already in there.
+    if (el.doorsOpen && !this.elDoorsWere && !ev.inside) this.stealth?.elevatorArrived();
+    this.elDoorsWere = el.doorsOpen;
     const rideY = ev.inside && el.moving ? el.y : null;
     let canMove = true;
     if (this.busy) {
@@ -330,6 +338,7 @@ export class Game {
       if (ev.noticed) this.hint('noticed', `Uh oh, ${ev.noticed.def.name} spotted you. Get out of sight, or press C to crouch.`);
       if (ev.spotted) { this.hud.pop(`${ev.spotted.def.name} wants a word!`, 'bad'); this.sfx.deny(); }
       if (ev.slipped) { this.score('Slipped away', 100, true); this.hint('slipped'); }
+      if (ev.riderSeen) this.hint('rider');
       if (ev.caught) {
         const cw = ev.caught;
         this.conversations += 1;
@@ -404,6 +413,10 @@ export class Game {
       if (d.justOpened && Math.abs(d.base.y - pp.y - 1.2) < 2) this.sfx.door(1 - Math.hypot(d.base.x - pp.x, d.base.z - pp.z) / 12);
     }
 
+    // (Positions only change in the physics step after this update, so compare with the last one.)
+    if (this.lastPos) this.checkRoutes(this.lastPos, pp);
+    (this.lastPos ||= new THREE.Vector3()).copy(pp);
+
     // Situational hints
     const Z = this.level.zones;
     if (this.elapsed > 1.2) this.hint('start');
@@ -431,6 +444,28 @@ export class Game {
     this.setXray(xr);
 
     this.near = near;
+  }
+
+  // Route bonuses: sneaky ways past the badge doors, scored once each as you cross the line.
+  route(id, label, pts) {
+    if (this.routes.has(id)) return;
+    this.routes.add(id);
+    this.score(label, pts);
+    this.sfx.coin();
+  }
+
+  checkRoutes(a, b) {
+    const s = this.state;
+    const ground = b.y < 2, f2 = b.y > 2;
+    // Through the turnstiles on Ben's badge (no pass of your own).
+    if (ground && a.z >= 11 && b.z < 11 && b.x > 12.1 && b.x < 13.9 && s.gateOpen === 13 && !s.hasBadge) {
+      this.route('tailgate', 'Tailgated the turnstiles', 250);
+      this.hint('tailgate');
+    }
+    // Through the propped mailroom door into the service corridor.
+    if (ground && a.x <= 26 && b.x > 26 && b.z > 20.3 && b.z < 22.4) this.route('mailroom', 'Mailroom shortcut', 150);
+    // Up the stairs and in behind Rita.
+    if (f2 && a.z <= 9 && b.z > 9 && b.x > 20.5 && b.x < 22.5 && s.smokerOpen) this.route('rita', 'Slipped in behind Rita', 250);
   }
 
   setXray(on) {
@@ -518,6 +553,9 @@ export class Game {
     const late = Math.max(0, this.elapsed - ROUND_SECONDS);
     this.player.idleStyle = late > 0 ? 'idle' : 'cheer';
     this.hud.setPrompt(null);
+    // Walked in through the back door (the front door is on the east wall, at x 9).
+    const pe = this.player.position;
+    if (pe.z < 18 && pe.x < 8) this.score('Back door into 2B', 300);
     const left = Math.max(0, ROUND_SECONDS - this.elapsed);
     const rows = [...this.events];
     const mmss = (real) => { const g = Math.floor(real * GAME_SECONDS_PER_REAL); return `${Math.floor(g / 60)}m ${String(g % 60).padStart(2, '0')}s`; };

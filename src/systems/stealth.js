@@ -88,6 +88,20 @@ const CAST = [
 // The person who steps out through the Floor 2 stair door for a smoke. Friendly: holds the door.
 const SMOKER = { id: 'rita', name: 'Rita', role: 'Smoke break', kind: 'woman', look: look('Olive', 'Medium', 'Auburn') };
 
+// Ben from Finance badges through the turnstiles every few seconds, from the entrance to the
+// elevators. Walk right behind him and the gate is still open for you (tailgating).
+const COMMUTER = { id: 'ben', name: 'Ben', role: 'Finance', kind: 'man', look: look('Charcoal', 'Fair', 'Blonde') };
+const COMMUTER_ROUTE = [[16.2, 23.4], [13, 12.5], [13, 9.6], [12.3, 5.8]];
+const COMMUTER_GATE = 13;          // centre x of the turnstile gate he uses
+const COMMUTER_WAIT = 5;           // seconds between trips
+
+// Sometimes someone is already in the elevator when it arrives. Step in and you're stuck.
+const RIDER = {
+  id: 'gary', name: 'Gary', role: 'Facilities', kind: 'man', look: look('Navy', 'Brown', 'Brown'), talk: 9,
+  lines: ['Going up? Me too.', 'Did you hear about the reorg?', 'They are moving us to the basement.', 'Anyway. Is this my floor?'],
+};
+const RIDER_CHANCE = 0.4;         // per round: he only turns up once
+
 // Already in Meeting 2B: Linda presents at the screen, Sam (who texts you tips) sits at the table.
 // They react when you walk in: nice things if you're on time, passive-aggressive ones if not.
 const ATTENDEES = [
@@ -157,6 +171,10 @@ export class Stealth {
     this.nav = [new NavGrid(world, R, { y: 0, skip }), new NavGrid(world, R, { y: F2, skip })];
     this.list = CAST.map((def) => this.makeCoworker(def));
     this.smoker = this.makeSmoker();
+    this.commuter = new Coworker({ ...COMMUTER, friendly: true }, this);
+    this.commuter.scripted = true;
+    this.rider = new Coworker(RIDER, this);
+    this.rider.isRider = true;
     this.attendees = ATTENDEES.map((def) => {
       const cw = new Coworker({ ...def, friendly: true }, this);
       cw.pos.set(def.at[0], F2, def.at[1]);
@@ -165,7 +183,8 @@ export class Stealth {
       cw.attendee = true;
       return cw;
     });
-    this.everyone = [...this.list, this.smoker, ...this.attendees];
+    this.smoker.scripted = true;
+    this.everyone = [...this.list, this.smoker, this.commuter, this.rider, ...this.attendees];
     this.monica = this.list.find((c) => c.def.id === 'monica');
     this.karen = this.list.find((c) => c.def.id === 'karen');
     this.joiners = this.list.filter((c) => c.def.meetingSpot);   // they head into 2B at nine
@@ -244,6 +263,13 @@ export class Stealth {
     s.active = false;
     s.group.visible = false;
     s.say = null; s.sayT = 0;
+    const c = this.commuter;
+    c.active = false; c.group.visible = false; c.say = null; c.sayT = 0;
+    c.waitT = 3;                      // first trip a few seconds into the run
+    this.level.state.gateOpen = null;
+    this.gateT = 0;
+    const r = this.rider;
+    r.active = false; r.group.visible = false; r.say = null; r.sayT = 0; r.state = 'gone'; r.used = false;
     for (const a of this.attendees) { a.state = 'attending'; a.say = null; a.sayT = 0; a.reactAnim = null; a.yaw = a.prevYaw = a.def.yaw; }
     this.reaction = null;
     this.meetingCalled = false;
@@ -342,6 +368,77 @@ export class Stealth {
     s.sayT = Math.max(0, s.sayT - dt);
   }
 
+  // ---------- Ben, badging through the turnstiles ----------
+  updateCommuter(dt) {
+    const c = this.commuter;
+    c.prev.copy(c.pos); c.prevYaw = c.yaw;
+    c.sayT = Math.max(0, c.sayT - dt);
+    if (!c.active) {
+      c.waitT -= dt;
+      if (c.waitT <= 0) {
+        c.active = true;
+        c.script = COMMUTER_ROUTE.slice(1).map(([x, z]) => new THREE.Vector3(x, 0, z));
+        c.pos.set(COMMUTER_ROUTE[0][0], 0, COMMUTER_ROUTE[0][1]);
+        c.prev.copy(c.pos);
+        c.yaw = c.prevYaw = 0;
+        c.fade = 0;
+        c.moving = true;
+      }
+    } else {
+      c.fade = Math.min(1, c.fade + dt * 2);
+      const t = c.script[0];
+      if (!t) {
+        c.moving = false;
+        c.fade = Math.max(0, c.fade - dt * 4);            // steps into the elevator lobby and is gone
+        c.outT = (c.outT || 0) + dt;
+        if (c.outT > 0.5) { c.active = false; c.outT = 0; c.waitT = COMMUTER_WAIT; }
+      } else {
+        const d = tmpV.subVectors(t, c.pos);
+        const flat = Math.hypot(d.x, d.z);
+        const step = 1.55 * dt;
+        if (flat <= step) { c.pos.copy(t); c.script.shift(); } else c.pos.addScaledVector(d, step / flat);
+        if (flat > 0.01) c.yaw += angleDiff(yawTo(d.x, d.z), c.yaw) * Math.min(1, dt * 8);
+      }
+    }
+    // His badge opens the gate as he reaches it; it stays open a moment after he's through.
+    const near = c.active && Math.hypot(c.pos.x - COMMUTER_GATE, c.pos.z - 11) < 1.6;
+    if (near) { this.gateT = 1.4; if (c.pos.z > 11.6 && !c.beeped) { c.beeped = true; this.onBadge?.(); } }
+    else this.gateT = Math.max(0, this.gateT - dt);
+    if (!c.active) c.beeped = false;
+    this.level.state.gateOpen = this.gateT > 0 ? COMMUTER_GATE : null;
+  }
+
+  // ---------- Gary, already in the elevator ----------
+  // Called when the elevator doors open for you (you're outside the car). Rolled once per round.
+  elevatorArrived() {
+    const r = this.rider;
+    if (r.active || r.used || this.conversation) return false;
+    r.used = true;
+    if (Math.random() > RIDER_CHANCE) return false;
+    r.active = true;
+    r.state = 'rider';
+    r.say = null; r.sayT = 0;
+    r.cooldown = 0;
+    return true;
+  }
+
+  updateRider(dt, P, events) {
+    const r = this.rider, el = this.level.elevator;
+    r.prev.copy(r.pos); r.prevYaw = r.yaw;
+    r.sayT = Math.max(0, r.sayT - dt);
+    if (!r.active) return;
+    r.pos.set(el.x + 0.7, el.y, el.z - 0.5);
+    if (r.state !== 'talk') r.yaw = r.prevYaw = Math.PI;        // facing the doors
+    const inside = el.contains(P.pos);
+    if (r.state === 'rider' && inside && !this.conversation && !P.hidden) { this.startConversation(r, P, events); return; }
+    // Doors close (or the car leaves) without you: Gary goes about his day.
+    if ((r.state === 'rider' && !inside && (!el.doorsOpen || el.moving)) || (r.state === 'leaving' && !inside && (!el.doorsOpen || el.moving))) {
+      r.active = false;
+      r.state = 'gone';
+    }
+    if (r.state === 'rider' && el.doorsOpen && Math.hypot(P.pos.x - el.x, P.pos.z - el.z) < 7 && Math.abs(P.pos.y - el.y) < 1.5) events.riderSeen ||= r;
+  }
+
   // ---------- Sight ----------
   // Can this coworker see the player right now? Returns the distance or -1.
   sees(cw, P) {
@@ -369,6 +466,8 @@ export class Stealth {
   update(dt, P, events) {
     this.grace = Math.max(0, this.grace - dt);
     this.updateSmoker(dt);
+    this.updateCommuter(dt);
+    this.updateRider(dt, P, events);
     if (this.conversation) this.updateConversation(dt, events);
     for (const m of this.joiners) {
       if (this.meetingCalled && !['talk', 'toMeeting', 'inMeeting'].includes(m.state)) this.sendToMeeting(m);
@@ -591,6 +690,14 @@ export class Stealth {
     cw.yaw += angleDiff(yawTo(P.x - cw.pos.x, P.z - cw.pos.z), cw.yaw) * Math.min(1, dt * 6);
     // Pulled apart (the elevator left with you in it): the chat just ends.
     if (Math.hypot(P.x - cw.pos.x, P.z - cw.pos.z) > 3 || Math.abs(P.y - cw.pos.y) > 1.5) c.excuse = cw.def.talk;
+    if (this.remaining <= 0 && cw.isRider) {
+      this.conversation = null;
+      cw.state = 'leaving';
+      cw.say = 'Oh, this is me. Bye!'; cw.sayT = 1.8;
+      this.grace = AFTER_TALK_GRACE;
+      events.released = cw;
+      return;
+    }
     if (this.remaining <= 0) {
       this.conversation = null;
       cw.state = 'return';
@@ -622,7 +729,8 @@ export class Stealth {
       // Once you're in 2B, only the people in the room keep their labels.
       const playing = live && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
       if (cw.attendee) { cw.group.position.copy(cw.pos); cw.group.rotation.y = cw.yaw; }
-      if (cw === this.smoker && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; continue; }
+      if ((cw.scripted || cw.isRider) && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; cw.group.visible = false; continue; }
+      if (cw === this.commuter) cw.char.setFade?.(cw.fade);
       const floor = cw.group.position.y > 2 ? 1 : 0;
       const same = floor === playerFloor;
       const d = Math.hypot(playerPos.x - cw.group.position.x, playerPos.z - cw.group.position.z);
@@ -632,16 +740,16 @@ export class Stealth {
       else if (cw.attendee) key = cw.def.pose;
       else if (cw.state === 'inMeeting') key = 'arms';
       else if (cw.state === 'talk') key = 'talk';
-      else if (cw === this.smoker) key = 'walk';
+      else if (cw.scripted) key = cw.moving ? 'walk' : 'idle';
       else if (cw.moving) key = cw.state === 'chase' ? 'jog' : 'walk';
       else if (cw.state === 'wait') key = cw.stops[cw.stop].pose || 'idle';
       else if (cw.state === 'notice') key = 'idle';
       cw.char.play(key, 0.25);
       const clip = CLIP_SPEED[key];
-      const spd = cw === this.smoker ? 1.35 : cw.speed || cw.def.speed;
+      const spd = cw === this.smoker ? 1.35 : cw === this.commuter ? 1.55 : cw.speed || cw.def.speed;
       if (cw.char.current) cw.char.current.timeScale = clip ? THREE.MathUtils.clamp(spd / clip, 0.6, 1.6) : 1;
       // People on the other floor are behind a concrete slab: skip drawing and animating them.
-      cw.group.visible = same && (cw !== this.smoker || cw.active);
+      cw.group.visible = same && (!(cw.scripted || cw.isRider) || cw.active);
       if (same) cw.char.update(dt);
       // Labels stack above the head in screen space (they keep a constant size on screen, so
       // the stacking uses each sprite's anchor rather than world-space offsets).
@@ -652,7 +760,7 @@ export class Stealth {
       cw.tag.visible = true;
       cw.tag.material.opacity += ((showTag ? 1 : 0) - cw.tag.material.opacity) * Math.min(1, dt * 6);
       const tagH = cw.tag.material.opacity > 0.3 ? cw.tag.scale.y : 0;
-      const showMeter = playing && same && cw.sus > 0.02 && cw !== this.smoker;
+      const showMeter = playing && same && cw.sus > 0.02 && !cw.scripted;
       cw.meter.visible = showMeter;
       if (showMeter) {
         drawMeter(cw.meter, cw.sus, cw.state);
@@ -714,5 +822,7 @@ export class Stealth {
   warmup(on) {
     for (const cw of this.list) { cw.cone.visible = on; cw.pathLine.visible = on; cw.meter.visible = on; cw.bubble.visible = on; cw.group.visible = true; }
     this.smoker.group.visible = on;
+    this.commuter.group.visible = on;
+    this.rider.group.visible = on;
   }
 }

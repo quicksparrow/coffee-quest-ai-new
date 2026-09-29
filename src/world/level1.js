@@ -174,7 +174,7 @@ export function buildLevel(b, state) {
     doors.push(new Door(b, {
       axis: 'x', a: x + 0.15, b: x + 1.85, fixed: 11, y0: 0, h: 1.0, thick: 0.06,
       color: C.glass, opacity: 0.6, lightY: 1.2, speed: 5,
-      shouldOpen: (p) => p.y < 2 && Math.hypot(p.x - cx, p.z - 11) < 1.5 && (p.z < 11 || state.hasBadge),
+      shouldOpen: (p) => state.gateOpen === cx || (p.y < 2 && Math.hypot(p.x - cx, p.z - 11) < 1.5 && (p.z < 11 || state.hasBadge)),
     }));
   });
   // Reception
@@ -207,7 +207,7 @@ export function buildLevel(b, state) {
   b.vwall(26, 9, 16.5, F2, H, [[11.5, 13.5]]);    // kitchen entrance
   b.hwall(16.5, 26, 32, F2, H);                   // kitchen | lounge
   // Meeting 2B: far corner of the floor, so you have to cross the whole open office.
-  b.hwall(16.5, 0, 9, F2, H);
+  b.hwall(16.5, 0, 9, F2, H, [[6, 7.2]]);        // back door, off the open office
   b.vwall(9, 16.5, 24, F2, H, [[20, 22]]);
   // Cubicle pods: rows between the arrivals (north) and Meeting 2B (south-west).
   const pods = [[1.5, 11], [7, 11], [12.5, 11], [18, 11], [12.5, 15], [18, 15], [12.5, 19.5], [18, 19.5]];
@@ -250,6 +250,13 @@ export function buildLevel(b, state) {
     shouldOpen: (p) => (onF2(p) && Math.hypot(p.x - 9, p.z - 21) < 2) || state.npcDoor,
   });
   doors.push(meetingDoor);
+  // Meeting 2B back door: a narrow side door from the open office. Nobody uses it, so nobody
+  // is watching it.
+  const backDoor = new Door(b, {
+    axis: 'x', a: 6, b: 7.2, fixed: 16.5, y0: F2, h: 2.4, color: 0x6b8fb3,
+    shouldOpen: (p) => onF2(p) && Math.hypot(p.x - 6.6, p.z - 16.5) < 1.8,
+  });
+  doors.push(backDoor);
 
   const decor = decorate(b);
 
@@ -276,6 +283,7 @@ export function buildLevel(b, state) {
       stairExit: new THREE.Vector3(21.5, F2, 9.8),
       meetingDoor: new THREE.Vector3(10.4, F2, 21),
       meeting: new THREE.Vector3(4.5, F2, 20),
+      backDoor: new THREE.Vector3(6.6, F2, 16.5),
     },
     // Places to hide. `at` is where you tuck in, `use` where you press Space, `exit` where you
     // step back out. Phone pods: pretend to be on a call. Closet and plants: crouch out of sight.

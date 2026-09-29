@@ -18,13 +18,14 @@ export class Beacons {
       { icon: 'coffee', title: 'Coffee', sub: 'Lobby café · latte', p: P.cafe },
       { icon: 'coffee', title: 'Coffee', sub: 'Kitchen · espresso', p: P.espresso },
       { icon: 'badge', title: 'Visitor pass', sub: 'Reception', p: P.reception, color: BLUE, show: () => !state.hasBadge },
-      { icon: 'badge', title: 'Turnstiles', sub: 'Pass needed', p: P.turnstiles, color: BLUE, show: () => !state.hasBadge },
+      { icon: 'badge', title: 'Turnstiles', sub: 'Pass, or tailgate Ben', p: P.turnstiles, color: BLUE, show: () => !state.hasBadge },
       { icon: 'door', title: 'Propped door', sub: 'Mailroom · to the stairs', p: v(26, 0, 21.35), color: BLUE },
       { icon: 'stairs', title: 'Stairs', sub: 'No badge needed', p: P.stairsFront, color: BLUE },
       { icon: 'lift', title: 'Elevator', sub: 'Behind the turnstiles', p: P.callG, color: BLUE },
       { icon: 'lift', title: 'Elevator', sub: 'Down to the lobby', p: P.callF2, color: BLUE },
       { icon: 'door', title: 'Stair door', sub: 'Down to the lobby', p: v(21.5, F2, 10), color: BLUE },
       { icon: 'goal', title: 'Meeting 2B', sub: '09:00 call', p: P.meeting, color: GREEN },
+      { icon: 'door', title: 'Back door', sub: 'Meeting 2B · quiet way in', p: P.backDoor, color: GREEN },
       ...level.hideSpots.map((h) => ({ icon: 'hide', title: 'Hide', sub: h.name, p: h.at, color: '#c9b3ff' })),
     ];
     this.items = defs.map((d) => {
