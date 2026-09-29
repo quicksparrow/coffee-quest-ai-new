@@ -283,7 +283,7 @@ export function buildLevel(b, state) {
       { name: 'Behind the plants', floor: 0, use: new THREE.Vector3(8.15, 0, 21.95), radius: 1.2, at: new THREE.Vector3(8.15, 0, 21.95), yaw: Math.PI * 0.75, pose: 'crouch', label: 'Duck behind the plants' },
       { name: 'Phone pod', floor: 1, use: new THREE.Vector3(22.85, F2, 18.6), radius: 1.1, at: new THREE.Vector3(24.4, F2, 18.6), yaw: Math.PI / 2, pose: 'phone', exit: new THREE.Vector3(22.85, F2, 18.6), exitYaw: Math.PI / 2, label: 'Hide in the phone pod' },
       { name: 'Phone pod', floor: 1, use: new THREE.Vector3(22.85, F2, 21.7), radius: 1.1, at: new THREE.Vector3(24.4, F2, 21.7), yaw: Math.PI / 2, pose: 'phone', exit: new THREE.Vector3(22.85, F2, 21.7), exitYaw: Math.PI / 2, label: 'Hide in the phone pod' },
-      { name: 'Supply closet', floor: 1, use: new THREE.Vector3(29.2, F2, 5), radius: 3.4, at: new THREE.Vector3(27.4, F2, 2.3), yaw: Math.PI, pose: 'crouch', label: 'Hide among the shelves' },
+      { name: 'Supply closet', floor: 1, use: new THREE.Vector3(27.7, F2, 2.9), radius: 1.1, at: new THREE.Vector3(27.4, F2, 2.3), yaw: Math.PI, pose: 'crouch', label: 'Hide among the shelves' },
     ],
     zones: {
       inCab: (p) => elevator.contains(p),
