@@ -30,7 +30,7 @@ The start screen lets you play as **Claire** (blonde, blue blouse) or **Steven**
 | C | Crouch on / off |
 | X (hold) | X-ray view: coworkers, where they're looking, their routes, coffee, hiding spots and the way up |
 | Space | Do the thing in front of you (get coffee, call the elevator, hide, step out, excuse yourself from a chat), or sip coffee |
-| P or Esc | Pause (resume with P, Esc, Enter, Space or a click): restart, hints on / off, sound |
+| P or Esc | Pause (resume with P, Esc, Enter, Space or a click): restart, hints on / off, sound, music |
 
 ## Level 1: "Badge? What Badge?"
 
@@ -41,7 +41,7 @@ Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips, 
 - Lobby café latte or the kitchen espresso upstairs, as many as you like: finish your cup and grab another. Dana at reception and Leo at the café have name tags and turn to greet you.
 - Past the badge turnstiles: a visitor pass from reception, or the propped mailroom door to the service stairs.
 - The elevator is a real car that rides between floors: call it, step in and wait (it leaves on its own after a moment) or press Space to go right away.
-- The stairs are one straight flight ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
+- The stairs (signposted from the lobby) are one straight flight, walled in on both sides, ending at the Floor 2 stair exit. That door is badge-only, but wait by it for 3 seconds and someone steps out and holds it open.
 - Meeting 2B is in the far corner of Floor 2, so you have to cross the whole open office to reach it.
 
 ## Coworkers
@@ -58,9 +58,9 @@ Seven chatty coworkers walk their routes: Pat (Accounting) and Tom (Sales) in th
 Everything you see and hear is generated in code when the game loads, so there is nothing extra to download and it works on any host:
 
 - Surfaces are painted on canvases (`src/world/textures.js`): carpet tiles, polished stone, wood planks and grain, concrete, painted plaster, partition fabric, ceiling tiles, brushed metal, plus the monitor screens, the café menu, the company sign, wall art and the city skyline outside. Textures are mapped in world space, so a carpet tile or a plank is the same real size everywhere.
-- The building has window bands on both floors with a skyline beyond them, ceilings with light panels, skirting boards, and a glass entrance. Reflections and soft fill light come from three.js's built-in room environment.
+- The building has window bands on both floors with a skyline beyond them, ceilings with light panels, skirting boards, and a glass entrance under a canopy. Outside the front door is a plaza with a fountain (animated water), trees in planters, benches, lamp posts and flags, with office towers across the street. Reflections and soft fill light come from three.js's built-in room environment, and the elevator has a real mirror (it only renders when you're near the car).
 - Furniture (`src/world/decor.js`): cubicle pods with desks, monitors, keyboards and office chairs, the reception desk, the café counter with pastry case and espresso machine, the kitchen, the meeting room, the lounge, phone pods, printer, mailroom pigeonholes, shelving, plants and art. It's all merged into a few meshes per material and none of it changes the collision or the coworkers' routes (the old graybox blocks are now invisible colliders).
-- Sound is synthesized with the Web Audio API (`src/core/audio.js`): air-conditioning rumble, distant chatter, keyboards upstairs, footsteps that click on stone and thud on carpet, doors, the elevator hum, plus the old beeps and dings. M in the pause menu mutes it.
+- Sound is synthesized with the Web Audio API (`src/core/audio.js`): a mellow lo-fi music loop (electric piano, bass, soft drums and a melody that changes each time round), air-conditioning rumble, distant chatter, keyboards upstairs, doors, the elevator hum, plus the beeps and dings. In the pause menu, M mutes all sound and N turns the music on or off.
 
 ## Deploy (Vercel or Netlify)
 

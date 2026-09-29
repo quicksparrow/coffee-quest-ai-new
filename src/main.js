@@ -187,7 +187,7 @@ async function boot() {
   let skipDelta = false;
   let dirty = true;   // outside of play we only redraw when something changed
   const showScreen = (id) => ['start', 'pause', 'end'].forEach((s) => { $(s).hidden = s !== id; });
-  const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; sfx.stopAmbience(); } };
+  const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; sfx.stopAmbience(); sfx.pauseMusic(true); } };
 
   const game = new Game({
     level, player, camCtl, input, hud, sfx, builder, marker, stealth, beacons,
@@ -252,6 +252,7 @@ async function boot() {
   const startGame = () => {
     sfx.unlock();
     sfx.startAmbience();
+    sfx.startMusic();
     camera.clearViewOffset();
     if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
@@ -266,6 +267,7 @@ async function boot() {
   const resume = () => {
     if (mode !== 'paused') return;
     sfx.startAmbience();
+    sfx.pauseMusic(false);
     input.endFrame();
     acc = 0;
     skipDelta = true;                 // don't count the paused time as one giant frame
@@ -286,6 +288,7 @@ async function boot() {
       else if (e.code === 'KeyR') startGame();
       if (e.code === 'KeyH') { game.hintsOn = !game.hintsOn; $('hints-state').textContent = game.hintsOn ? 'On' : 'Off'; }
       if (e.code === 'KeyM') { sfx.enabled = !sfx.enabled; $('sound-state').textContent = sfx.enabled ? 'On' : 'Off'; }
+      if (e.code === 'KeyN') { sfx.musicOn = !sfx.musicOn; $('music-state').textContent = sfx.musicOn ? 'On' : 'Off'; }
     }
   });
   window.addEventListener('blur', pause);
@@ -352,6 +355,7 @@ async function boot() {
       camCtl.update(dt, player);
       placeSun(player.floor, player.renderPos.x, player.renderPos.z);
       if (mode === 'playing') { game.updateHud(dt); sounds(dt); }
+      mirrorCheck();
       renderer.render(scene, camera);
       adaptQuality(raw);
     } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
@@ -403,26 +407,21 @@ async function boot() {
     player.setFade(1);
   }
 
-  // Footsteps (one per stride, by floor surface) and the office ambience.
-  const lastStep = new THREE.Vector3();
-  let stride = 0;
+  // Office ambience, and the elevator mirror only when you're near the car (a mirror draws the
+  // scene a second time, so it stays off the rest of the time).
   function sounds(dt) {
     const p = player.renderPos;
     const riding = level.elevator.moving && level.zones.inCab(p);
     sfx.updateAmbience(dt, { floor: player.floor, riding });
-    const moved = Math.hypot(p.x - lastStep.x, p.z - lastStep.z);
-    lastStep.copy(p);
-    if (riding || player.hidden || moved > 1 || !player.moving) { if (!player.moving) stride = 0.5; return; }
-    stride += moved;
-    const len = player.hurrying ? 1.05 : player.crouching ? 0.55 : 0.8;
-    if (stride >= len) {
-      stride -= len;
-      const carpet = player.floor === 1 && p.x < 26 && !level.zones.stairwell(p);
-      sfx.step(carpet ? 'carpet' : 'hard', player.crouching ? 0.45 : player.hurrying ? 1.3 : 1);
-    }
+  }
+  function mirrorCheck() {
+    const el = level.elevator;
+    const near = Math.abs(el.group.position.y - player.renderPos.y) < 2.5 && Math.hypot(player.renderPos.x - el.x, player.renderPos.z - el.z) < 8;
+    el.mirror.visible = near && (mode === 'playing' || mode === 'paused');
   }
 
   function animateCharacters(dt) {
+    level.decor?.update(dt);
     player.animate(dt);
     stealth?.animate(dt, { playerPos: player.renderPos, playerFloor: player.floor, playing: mode === 'playing' || mode === 'end' });
     beacons.update(dt, player.floor);

@@ -361,3 +361,72 @@ export const skyline = () => make('skyline', () => {
   ctx.fillStyle = '#8d9398'; ctx.fillRect(0, 490, 2048, 22);
   return c;
 });
+
+// Wayfinding sign: stairs pictogram, label, arrow ('up', 'left', 'right' or null).
+export function stairsSign(arrow) {
+  return make(`sign-stairs-${arrow}`, () => {
+    const [c, ctx] = canvas(512, 192);
+    ctx.fillStyle = '#26303b';
+    ctx.beginPath(); ctx.roundRect(0, 0, 512, 192, 22); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    // pictogram: a person-free staircase in a rounded square
+    ctx.beginPath(); ctx.roundRect(24, 24, 144, 144, 18); ctx.fill();
+    ctx.fillStyle = '#26303b';
+    ctx.beginPath(); ctx.moveTo(44, 148); ctx.lineTo(44, 124); ctx.lineTo(74, 124); ctx.lineTo(74, 96); ctx.lineTo(104, 96); ctx.lineTo(104, 68); ctx.lineTo(134, 68); ctx.lineTo(134, 44); ctx.lineTo(150, 44); ctx.lineTo(150, 148); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 64px "Barlow Condensed", "Arial Narrow", Arial, sans-serif';
+    ctx.fillText('STAIRS', 196, 118);
+    if (arrow) {
+      ctx.save(); ctx.translate(446, 96);
+      ctx.rotate({ up: -Math.PI / 2, left: Math.PI, right: 0 }[arrow]);
+      ctx.beginPath(); ctx.moveTo(-26, -10); ctx.lineTo(4, -10); ctx.lineTo(4, -26); ctx.lineTo(32, 0); ctx.lineTo(4, 26); ctx.lineTo(4, 10); ctx.lineTo(-26, 10); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    return c;
+  }, { repeat: false });
+}
+
+// Office tower facade across the street: glass curtain wall with mullions.
+export const facade = () => make('facade', () => {
+  const [c, ctx] = canvas(256);
+  const r = rng(131);
+  ctx.fillStyle = '#7f98ad'; ctx.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 32) {
+    for (let x = 0; x < 256; x += 32) {
+      const v = 120 + Math.floor(r() * 50);
+      ctx.fillStyle = `rgb(${v - 20},${v},${v + 25})`;
+      ctx.fillRect(x + 3, y + 5, 26, 24);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(x + 3, y + 5, 26, 6);
+    }
+  }
+  ctx.fillStyle = '#d6dbe0';
+  for (let k = 0; k < 256; k += 32) { ctx.fillRect(k, 0, 3, 256); ctx.fillRect(0, k, 256, 5); }
+  return c;
+});
+
+// Water: soft ripples (surfaces) and falling streaks (jets and curtains). Offsets animate.
+export const ripples = () => make('ripples', () => {
+  const [c, ctx] = canvas(256);
+  const r = rng(151);
+  ctx.fillStyle = '#6fa7c9'; ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 60; i++) {
+    const x = r() * 256, y = r() * 256, rad = 8 + r() * 30;
+    for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.15 + r() * 0.2})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(x + ox, y + oy, rad, rad * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  return c;
+});
+
+export const streaks = () => make('streaks', () => {
+  const [c, ctx] = canvas(128, 256);
+  const r = rng(167);
+  ctx.fillStyle = 'rgba(210,235,250,0.55)'; ctx.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 70; i++) {
+    const x = r() * 128, y = r() * 256, h = 20 + r() * 60;
+    for (const oy of [-256, 0, 256]) { ctx.fillStyle = `rgba(255,255,255,${0.3 + r() * 0.5})`; ctx.fillRect(x, y + oy, 1.5 + r() * 2, h); }
+  }
+  return c;
+});

@@ -26,7 +26,9 @@ export function decorate(b) {
 
   lights(K);
   furnish(b, M);
-  return K;
+  const fountain = plaza(b, M);
+  // Things that move every frame (the fountain's water).
+  return { update: (dt) => fountain.update(dt) };
 }
 
 function materials(b) {
@@ -51,11 +53,21 @@ function materials(b) {
     menu: basic(TX.menuBoard()),
     logo: new THREE.MeshStandardMaterial({ map: TX.logo(), transparent: true, roughness: 0.4 }),
     art: [0, 1, 2].map((i) => new THREE.MeshStandardMaterial({ map: TX.art(i + 1), roughness: 0.7 })),
-    leaves: new THREE.MeshStandardMaterial({ map: TX.leaves(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }),
+    // Alpha-to-coverage (with the canvas's antialiasing) gives soft leaf edges that don't
+    // shimmer as you move, unlike a plain alpha cut-out.
+    leaves: new THREE.MeshStandardMaterial({ map: TX.leaves(), alphaTest: 0.4, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8 }),
     box: b.surface('paint', 0xb8966c, { roughness: 0.9 }),
     paper: b.surface('paint', 0xf7f7f2, { roughness: 0.9 }),
     pastry: b.surface('paint', 0xc98a4b, { roughness: 0.7 }),
     glassCase: b.surface('glass', 0xdfeaf2, { opacity: 0.35 }),
+    sign: (arrow) => new THREE.MeshStandardMaterial({ map: TX.stairsSign(arrow), roughness: 0.5 }),
+    paver: b.surface('stone', 0xd9cfc0),
+    stoneTrim: b.surface('concrete', 0xe3ddd2),
+    bark: b.surface('paint', 0x5b4636, { roughness: 1 }),
+    foliage: new THREE.MeshStandardMaterial({ color: 0x5f8f4e, roughness: 0.9, flatShading: true }),
+    foliage2: new THREE.MeshStandardMaterial({ color: 0x77a35a, roughness: 0.9, flatShading: true }),
+    lamp: b.surface('paint', 0xffffff, { emissive: 0xfff1d6 }),
+    flag: [0xd6a27c, 0x2f4858, 0x86a8c4].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, side: THREE.DoubleSide })),
     rug: Object.assign(new THREE.MeshStandardMaterial({ map: TX.fabric(), color: 0x7e8e76, roughness: 1 }), { userData: { tile: 0.5 } }),
   };
 }
@@ -128,12 +140,15 @@ export function piece(b, x, y, z, rot = 0) {
 
 export function officeChair(b, M, x, y, z, rot) {
   const p = piece(b, x, y, z, rot);
+  // Five legs from a hub. Legs start away from the centre so none overlap (overlapping faces in
+  // the same plane flicker).
+  p.cyl(0.07, 0.07, 0.05, M.darkMetal, 0, 0.025, 0, 12);
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    p.box(0.3, 0.035, 0.045, M.darkMetal, Math.cos(a) * 0.15, 0.03, Math.sin(a) * 0.15, -a);
-    p.cyl(0.025, 0.025, 0.03, M.black, Math.cos(a) * 0.3, 0, Math.sin(a) * 0.3, 8);
+    p.box(0.24, 0.034, 0.045, M.darkMetal, Math.cos(a) * 0.19, 0.032 + i * 0.0015, Math.sin(a) * 0.19, -a);
+    p.cyl(0.025, 0.025, 0.03, M.black, Math.cos(a) * 0.3, 0.004, Math.sin(a) * 0.3, 8);
   }
-  p.cyl(0.028, 0.028, 0.34, M.metal, 0, 0.06, 0, 10);
+  p.cyl(0.028, 0.028, 0.33, M.metal, 0, 0.075, 0, 10);
   p.rbox(0.5, 0.08, 0.48, 0.03, M.seat, 0, 0.4, 0.02);
   p.box(0.05, 0.22, 0.04, M.darkMetal, 0, 0.44, -0.23);
   p.rbox(0.46, 0.5, 0.06, 0.03, M.seat, 0, 0.55, -0.25);
@@ -149,10 +164,27 @@ export function workstation(b, M, x, y, z, rot, screen, { keyboard = true } = {}
   p.box(0.22, 0.012, 0.16, M.black, 0, 0, -0.04);
   p.box(0.04, 0.3, 0.03, M.black, 0, 0.012, -0.07);
   p.rbox(0.58, 0.35, 0.03, 0.008, M.black, 0, 0.19, -0.05);
-  p.plane(0.54, 0.31, screen, 0, 0.365, -0.034);
+  p.plane(0.54, 0.31, screen, 0, 0.365, -0.028);
   if (keyboard) {
     p.rbox(0.42, 0.018, 0.13, 0.006, M.white, 0, 0, 0.2);
     p.rbox(0.06, 0.02, 0.1, 0.01, M.white, 0.3, 0, 0.21);
+  }
+}
+
+// Laptop, open, screen facing +z's opposite (toward whoever sits at +z).
+export function laptop(b, M, x, y, z, rot, screen) {
+  const p = piece(b, x, y, z, rot);
+  p.rbox(0.34, 0.018, 0.24, 0.008, M.metal, 0, 0, 0);
+  p.box(0.3, 0.002, 0.13, M.black, 0, 0.018, -0.02);                 // keyboard
+  // The lid hinges at the back edge and leans back about 15 degrees.
+  const back = new THREE.Vector3(0, 0.018, -0.12).applyAxisAngle(up, rot).add(V(x, y, z));
+  const g = new RoundedBoxGeometry(0.34, 0.23, 0.012, 2, 0.006);
+  const sc = new THREE.PlaneGeometry(0.31, 0.19);
+  const tilt = new THREE.Matrix4().makeRotationX(-0.26);
+  for (const [geo, mat, dz] of [[g, M.metal, 0], [sc, screen, 0.0075]]) {
+    geo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.115, dz)).applyMatrix4(tilt)
+      .applyMatrix4(new THREE.Matrix4().makeRotationY(rot)).applyMatrix4(new THREE.Matrix4().makeTranslation(back.x, back.y, back.z));
+    b.addGeo(geo, mat, { cast: mat !== screen });
   }
 }
 
@@ -163,9 +195,8 @@ export function plant(b, M, x, y, z, h = 1.2, potR = 0.22, collide = false) {
   p.cyl(potR * 0.92, potR * 0.92, 0.02, M.soil, 0, 0.4, 0, 18);
   const n = 5;
   for (let i = 0; i < n; i++) {
-    p.plane(h * 0.75, h * 0.85, M.leaves, 0, 0.4 + h * 0.42, 0, (i / n) * Math.PI, { cast: false });
+    p.plane(h * 0.75, h * 0.85, M.leaves, 0, 0.4 + h * 0.42, 0, ((i + 0.5) / n) * Math.PI, { cast: false });
   }
-  p.plane(h * 0.6, h * 0.6, M.leaves, 0, 0.4 + h * 0.62, 0, 0, { cast: false });
 }
 
 export function sofa(b, M, x, y, z, rot, w, d, mat) {
@@ -184,8 +215,8 @@ export function sofa(b, M, x, y, z, rot, w, d, mat) {
 export function pod(b, M, x0, z0, seed) {
   const W = 4.3, D = 2.2, y = F2, cx = x0 + W / 2, cz = z0 + D / 2;
   const p = piece(b, cx, y, cz, 0);
-  p.box(W, 1.25, 0.06, M.fabricGrey, 0, 0, 0);
-  p.box(W + 0.02, 0.025, 0.08, M.darkMetal, 0, 1.25, 0);
+  p.box(W - 0.14, 1.25, 0.06, M.fabricGrey, 0, 0, 0);
+  p.box(W - 0.12, 0.025, 0.08, M.darkMetal, 0, 1.25, 0);
   for (const s of [-1, 1]) {
     p.box(0.06, 1.1, D - 0.1, M.fabricGrey, s * (W / 2 - 0.03), 0, 0);
     p.box(0.08, 0.025, D - 0.1, M.darkMetal, s * (W / 2 - 0.03), 1.1, 0);
@@ -237,6 +268,9 @@ function furnish(b, M) {
   plant(b, M, 3.6, G, 3.6, 1.2, 0.33);
   plant(b, M, 19.3, G, 23.3, 1.2, 0.3, true);
   plant(b, M, 1.0, G, 23.0, 1.4, 0.3, true);
+  // Stairs signs: above the stairwell door, and on the mailroom wall pointing the way.
+  P(24.5, G, 9.12, 0).plane(0.95, 0.36, M.sign(null), 0, 2.72, 0);
+  P(25.88, G, 12.4, -Math.PI / 2).plane(0.8, 0.3, M.sign('left'), 0, 1.75, 0);
   // Art on the mailroom wall (lobby side) and in the secure area.
   P(25.88, G, 15.5, -Math.PI / 2).plane(1.6, 1.2, M.art[0], 0, 1.7, 0);
   P(19.88, G, 6, -Math.PI / 2).plane(1.4, 1.05, M.art[1], 0, 1.7, 0);
@@ -257,7 +291,7 @@ function furnish(b, M) {
     for (let i = 0; i < 4; i++) P(20.3 + i * 0.12, G + 1.09, 20.2, 0).cyl(0.045, 0.035, 0.12 + i * 0.1, M.white, 0, 0, 0, 10);
     const menu = P(21, G, 21.2, Math.PI);
     menu.box(2.2, 0.85, 0.05, M.black, 0, 2.62, 0);                  // above the camera's height
-    menu.plane(2.1, 0.8, M.menu, 0, 3.045, 0.03);
+    menu.plane(2.1, 0.8, M.menu, 0, 3.045, 0.035);
     for (const dx of [-0.95, 0.95]) menu.box(0.01, 0.2, 0.01, M.darkMetal, dx, 3.47, 0);
   }
 
@@ -342,7 +376,7 @@ function furnish(b, M) {
     tv.plane(2.1, 1.2, M.slide, 0, 1.64, 0.035);
     P(4.5, F2, 16.61, 0).plane(1.6, 1.1, M.art[1], 0, 1.7, 0);
     plant(b, M, 0.7, F2, 23.3, 1.3, 0.3, true);
-    workstation(b, M, 4.3, F2 + 0.75, 21.0, 0, M.screens[2], { keyboard: false });        // Sam's screen on the table
+    laptop(b, M, 4.4, F2 + 0.75, 21.2, 0, M.screens[2]);                                    // Sam's laptop
   }
 
   // --- Lounge: sofa, coffee table on a rug, plants.
@@ -365,6 +399,12 @@ function furnish(b, M) {
     p.box(1.9, 0.04, 0.45, M.oak, 0.1, 0.95, 0, Math.PI / 2);
     p.cyl(0.18, 0.18, 0.45, M.fabricBlue, -0.2, 0, 0, 16);
     p.box(0.5, 0.02, 0.5, M.panel, 0, 2.27, 0);
+    // Glass door on the aisle side: frame, hinge side, a long bar handle.
+    const dz = 0.45;
+    for (const e of [-dz, dz]) p.box(0.06, 2.1, 0.05, M.darkMetal, -1.03, 0, e);
+    p.box(0.06, 0.05, dz * 2 + 0.05, M.darkMetal, -1.03, 2.1, 0);
+    p.box(0.02, 0.9, 0.025, M.metal, -1.08, 0.6, dz - 0.12);
+    for (const y of [0.6, 1.47]) p.box(0.05, 0.02, 0.02, M.metal, -1.05, y, dz - 0.12);
   }
 
   // --- Printer and a paper stack.
@@ -397,4 +437,87 @@ function shelving(b, M, x, y, z, rot, w, h, d, seed) {
       x0 += bw + 0.06;
     }
   }
+}
+
+// ---------- Outside the front door: a plaza with a fountain, trees, benches, lamps and flags,
+// and an office tower across the street. Seen through the glass entrance and lobby windows.
+function plaza(b, M) {
+  const P = (x, y, z, r) => piece(b, x, y, z, r);
+  const facade = new THREE.MeshStandardMaterial({ map: TX.facade(), roughness: 0.3, metalness: 0.2, envMapIntensity: 1.2 });
+  facade.userData.tile = 8;
+  // Paving at entrance level, with a step down to the street at the far edge.
+  P(15, -0.32, 34.5, 0).box(40, 0.32, 20, M.paver, 0, 0, 0);          // starts where the building slab ends (no overlap)
+  P(15, -0.32, 44.7, 0).box(40, 0.16, 0.4, M.stoneTrim, 0, 0, 0);
+  // Canopy over the entrance.
+  const c = P(15, 0, 24, 0);
+  c.box(6, 0.16, 2.6, M.darkMetal, 0, 3.05, 1.35);
+  c.box(5.8, 0.02, 2.4, M.lamp, 0, 3.04, 1.35, 0, { cast: false });
+  for (const s of [-2.8, 2.8]) c.box(0.1, 3.05, 0.1, M.darkMetal, s, 0, 2.5);
+  // Fountain: basin, water, a column with an upper bowl, a curtain of water, arcing jets.
+  const fx = 15, fz = 33;
+  const f = P(fx, 0, fz, 0);
+  f.cyl(3.1, 3.2, 0.5, M.stoneTrim, 0, 0, 0, 48);
+  f.cyl(0.4, 0.5, 1.3, M.stoneTrim, 0, 0.45, 0, 20);
+  f.cyl(1.0, 0.35, 0.28, M.stoneTrim, 0, 1.6, 0, 32);
+  const water = [];
+  const scene = b.scene;
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.renderOrder = 2; scene.add(m); return m; };
+  const rip = TX.ripples().clone(); rip.needsUpdate = true; rip.repeat.set(3, 3);
+  const surf = new THREE.MeshStandardMaterial({ map: rip, color: 0x9fd0ea, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.85, envMapIntensity: 1.4 });
+  const pool = new THREE.CircleGeometry(2.95, 48); pool.rotateX(-Math.PI / 2);
+  add(pool, surf, fx, 0.44, fz);
+  const bowl = new THREE.CircleGeometry(0.92, 32); bowl.rotateX(-Math.PI / 2);
+  add(bowl, surf, fx, 1.86, fz);
+  const st = TX.streaks().clone(); st.needsUpdate = true; st.wrapS = st.wrapT = THREE.RepeatWrapping; st.repeat.set(6, 1);
+  const fall = new THREE.MeshStandardMaterial({ map: st, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 0.1, color: 0xe6f4fc, opacity: 0.8 });
+  add(new THREE.CylinderGeometry(0.98, 1.15, 1.4, 32, 1, true), fall, fx, 1.15, fz);
+  const jetTex = TX.streaks().clone(); jetTex.needsUpdate = true; jetTex.wrapS = jetTex.wrapT = THREE.RepeatWrapping; jetTex.repeat.set(1, 3);
+  const jet = new THREE.MeshStandardMaterial({ map: jetTex, transparent: true, depthWrite: false, roughness: 0.1, color: 0xeaf6fd, opacity: 0.85 });
+  add(new THREE.CylinderGeometry(0.03, 0.09, 1.1, 10, 1, true), jet, fx, 2.4, fz);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const from = new THREE.Vector3(Math.cos(a) * 2.8, 0.5, Math.sin(a) * 2.8);
+    const to = new THREE.Vector3(Math.cos(a) * 1.35, 0.45, Math.sin(a) * 1.35);
+    const top = from.clone().lerp(to, 0.45).setY(1.5);
+    const curve = new THREE.QuadraticBezierCurve3(from, top, to);
+    add(new THREE.TubeGeometry(curve, 16, 0.035, 6, false), jet, fx, 0, fz);
+  }
+  water.push(rip, st, jetTex);
+  // Planters with trees, benches facing the fountain, lamp posts, flags, bollards.
+  const tree = (x, z) => {
+    const t = P(x, 0, z, 0);
+    t.box(1.6, 0.55, 1.6, M.stoneTrim, 0, 0, 0);
+    t.box(1.45, 0.02, 1.45, M.soil, 0, 0.55, 0);
+    t.cyl(0.1, 0.14, 2.4, M.bark, 0, 0.55, 0, 10);
+    const leaf = (r, dx, dy, dz, m) => { const g = new THREE.IcosahedronGeometry(r, 1); g.translate(x + dx, dy, z + dz); b.addGeo(g, m); };
+    leaf(1.1, 0, 3.3, 0, M.foliage); leaf(0.8, 0.6, 3.0, 0.3, M.foliage2); leaf(0.75, -0.5, 3.1, -0.4, M.foliage2); leaf(0.7, 0.1, 3.9, -0.2, M.foliage);
+  };
+  [[5, 28.5], [25, 28.5], [4, 39], [26, 39]].forEach(([x, z]) => tree(x, z));
+  const bench = (x, z, rot) => {
+    const t = P(x, 0, z, rot);
+    t.box(2, 0.08, 0.5, M.oak, 0, 0.42, 0);
+    t.box(2, 0.4, 0.06, M.oak, 0, 0.55, -0.24);
+    for (const s of [-0.8, 0.8]) t.box(0.06, 0.42, 0.45, M.darkMetal, s, 0, 0);
+  };
+  bench(fx - 5, fz, Math.PI / 2); bench(fx + 5, fz, -Math.PI / 2); bench(fx, fz + 5, Math.PI);
+  const lampPost = (x, z) => { const t = P(x, 0, z, 0); t.cyl(0.06, 0.08, 3.6, M.darkMetal, 0, 0, 0, 10); t.cyl(0.25, 0.18, 0.3, M.darkMetal, 0, 3.6, 0, 12); t.cyl(0.2, 0.2, 0.05, M.lamp, 0, 3.58, 0, 12); };
+  [[9, 27], [21, 27], [9, 40], [21, 40]].forEach(([x, z]) => lampPost(x, z));
+  [[22.5, 26.5], [24, 26.5], [25.5, 26.5]].forEach(([x, z], i) => {
+    const t = P(x, 0, z, 0);
+    t.cyl(0.04, 0.05, 6, M.metal, 0, 0, 0, 8);
+    t.plane(1.2, 0.75, M.flag[i], 0.62, 5.4, 0, 0);
+  });
+  for (let x = -3; x <= 33; x += 3) P(x, 0, 43.6, 0).cyl(0.1, 0.12, 0.8, M.darkMetal, 0, 0, 0, 10);
+  // Across the street: an office tower and a lower block.
+  P(8, -0.32, 60, 0).box(18, 36, 10, facade, 0, 0, 0);
+  P(28, -0.32, 58, 0).box(14, 20, 8, facade, 0, 0, 0);
+  P(-12, -0.32, 30, 0).box(10, 26, 16, facade, 0, 0, 0);
+  P(44, -0.32, 28, 0).box(10, 30, 14, facade, 0, 0, 0);
+  return {
+    update(dt) {
+      rip.offset.x += dt * 0.02; rip.offset.y += dt * 0.013;
+      st.offset.y += dt * 0.9;
+      jetTex.offset.y -= dt * 1.6;
+    },
+  };
 }

@@ -1,7 +1,20 @@
-// Synthesized sound: effects, footsteps and office ambience. No audio files, so it works on
-// any host and costs nothing to download.
+// Synthesized sound: effects, office ambience and a little lo-fi background music. No audio
+// files, so it works on any host and costs nothing to download.
+
+const MUSIC_LEVEL = 0.32;
+const BPM = 82;
+// Four chords, one bar each (Fmaj7, Em7, Dm7, Cmaj7), as MIDI notes; the bass plays the root.
+const CHORDS = [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]];
+const SCALE = [72, 74, 76, 79, 81, 84];   // C major pentatonic, for the melody
+const hz = (n) => 440 * Math.pow(2, (n - 69) / 12);
 export class Sfx {
-  constructor() { this.ctx = null; this._enabled = true; this.amb = null; }
+  constructor() { this.ctx = null; this._enabled = true; this.amb = null; this.music = null; this._musicOn = true; }
+
+  get musicOn() { return this._musicOn; }
+  set musicOn(on) {
+    this._musicOn = on;
+    if (this.music) this.music.bus.gain.setTargetAtTime(on && !this.music.paused ? MUSIC_LEVEL : 0, this.ctx.currentTime, 0.3);
+  }
 
   get enabled() { return this._enabled; }
   set enabled(on) {
@@ -48,7 +61,7 @@ export class Sfx {
   }
 
   // A filtered noise burst: the building block for steps, clicks and whooshes.
-  burst({ dur = 0.08, vol = 0.05, type = 'bandpass', freq = 1200, q = 1, to = null, when = 0, attack = 0.004 }) {
+  burst({ dur = 0.08, vol = 0.05, type = 'bandpass', freq = 1200, q = 1, to = null, when = 0, attack = 0.004, dest = this.master }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime + when;
     const src = this.ctx.createBufferSource();
@@ -61,7 +74,7 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(dest);
     src.start(t, Math.random() * 0.8);
     src.stop(t + dur + 0.02);
   }
@@ -74,17 +87,6 @@ export class Sfx {
   buzz() { this.tone(160, 0.12, 'sawtooth', 0.04); this.tone(160, 0.12, 'sawtooth', 0.04, 0.18); }
   spill() { this.tone(500, 0.25, 'sawtooth', 0.04, 0, 120); this.burst({ dur: 0.3, vol: 0.03, type: 'lowpass', freq: 1800, to: 400 }); }
   win() { [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.3, 'triangle', 0.09, i * 0.12)); }
-
-  // Footstep on a surface: 'hard' (stone, wood, concrete) clicks, 'carpet' thuds softly.
-  step(surface, loud = 1) {
-    const v = 0.5 + Math.random() * 0.25;
-    if (surface === 'carpet') {
-      this.burst({ dur: 0.07, vol: 0.05 * v * loud, type: 'lowpass', freq: 500 });
-    } else {
-      this.burst({ dur: 0.05, vol: 0.05 * v * loud, type: 'bandpass', freq: 2200 + Math.random() * 600, q: 1.2 });
-      this.burst({ dur: 0.07, vol: 0.05 * v * loud, type: 'lowpass', freq: 380 });
-    }
-  }
 
   // Sliding door / turnstile flap, quieter with distance (vol 0..1).
   door(vol = 1) {
@@ -153,5 +155,75 @@ export class Sfx {
         for (let i = 0; i < n; i++) this.burst({ dur: 0.02, vol: 0.006 + Math.random() * 0.006, type: 'highpass', freq: 3000, when: i * (0.07 + Math.random() * 0.1) });
       }
     }
+  }
+
+  // ---------- Background music ----------
+  // A mellow four-chord loop: electric piano, bass, soft drums with a lazy swing, and a sparse
+  // melody that changes every time round. Scheduled a little ahead with the audio clock.
+  startMusic() {
+    if (!this.ctx) return;
+    if (this.music) { this.pauseMusic(false); return; }
+    const ctx = this.ctx;
+    const bus = ctx.createGain();
+    bus.gain.setValueAtTime(0.0001, ctx.currentTime);
+    bus.gain.linearRampToValueAtTime(this._musicOn ? MUSIC_LEVEL : 0, ctx.currentTime + 2.5);
+    const warm = ctx.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 3200;
+    bus.connect(warm).connect(this.master);
+    const m = { bus, next: ctx.currentTime + 0.1, step: 0, paused: false };
+    this.music = m;
+    m.timer = setInterval(() => this.scheduleMusic(), 50);
+  }
+
+  pauseMusic(paused) {
+    const m = this.music;
+    if (!m) return;
+    m.paused = paused;
+    m.bus.gain.setTargetAtTime(!paused && this._musicOn ? MUSIC_LEVEL : 0, this.ctx.currentTime, paused ? 0.15 : 0.6);
+    if (!paused) m.next = Math.max(m.next, this.ctx.currentTime + 0.05);
+  }
+
+  scheduleMusic() {
+    const m = this.music, ctx = this.ctx;
+    if (!m || m.paused) return;
+    const eighth = 60 / BPM / 2;
+    while (m.next < ctx.currentTime + 0.25) {
+      const i = m.step % 32;                     // 8 eighths per bar, 4 bars
+      const bar = Math.floor(i / 8), e = i % 8;
+      const swing = e % 2 ? eighth * 0.18 : 0;
+      const t = m.next + swing;
+      const chord = CHORDS[bar];
+      if (e === 0 || e === 3) chord.forEach((n, k) => this.keys(hz(n), t + k * 0.012, e === 0 ? 0.05 : 0.03, eighth * (e === 0 ? 5 : 3)));
+      if (e === 0 || e === 4) this.bass(hz(chord[0] - 12), t, eighth * 3.5);
+      if (e === 6 && Math.random() < 0.5) this.bass(hz(chord[0] - 12 + 7), t, eighth * 1.5);
+      if (e === 0 || e === 4) this.kick(t);
+      if (e === 2 || e === 6) this.burst({ dur: 0.12, vol: 0.018, type: 'bandpass', freq: 1800, q: 0.8, when: t - ctx.currentTime, dest: m.bus });
+      this.burst({ dur: 0.03, vol: e % 2 ? 0.006 : 0.01, type: 'highpass', freq: 7000, when: t - ctx.currentTime, dest: m.bus });
+      if (e % 2 === 0 && Math.random() < 0.3) this.lead(hz(SCALE[Math.floor(Math.random() * SCALE.length)]), t, eighth * 2);
+      m.next += eighth;
+      m.step += 1;
+    }
+  }
+
+  voice(freq, t, dur, vol, type, dest = this.music.bus) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(vol * 0.35, t + dur * 0.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(dest);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  // Electric-piano-ish: a sine with a quieter bell partial that fades faster.
+  keys(freq, t, vol, dur) { this.voice(freq, t, dur, vol, 'sine'); this.voice(freq * 2, t, dur * 0.4, vol * 0.25, 'sine'); }
+  bass(freq, t, dur) { this.voice(freq, t, dur, 0.09, 'triangle'); }
+  lead(freq, t, dur) { this.voice(freq, t, dur, 0.022, 'triangle'); }
+  kick(t) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.connect(g).connect(this.music.bus); o.start(t); o.stop(t + 0.3);
   }
 }

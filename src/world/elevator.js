@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 
 const TRAVEL_TIME = 3.4;   // seconds between floors
 const DOOR_TIME = 0.9;     // doors closing before the car moves
@@ -60,6 +61,16 @@ export class Elevator {
     box(0.05, 2.6, halfZ * 2 - 0.1, -halfX + 0.03, 1.33, 0, m(0xb9bfc7));              // side walls
     box(0.05, 2.6, halfZ * 2 - 0.1, halfX - 0.03, 1.33, 0, m(0xb9bfc7));
     box(halfX * 2 - 0.3, 0.05, 0.06, 0, 0.95, -halfZ + 0.1, m(0x707a86, { metalness: 0.7 })); // handrail
+    // A mirror on the back wall, in a brushed steel frame. It only renders when you're near the
+    // car (see main.js), since a mirror draws the scene a second time.
+    this.mirror = new Reflector(new THREE.PlaneGeometry(1.5, 1.55), { textureWidth: 512, textureHeight: 512, color: 0xc4c8cc, clipBias: 0.003 });
+    this.mirror.position.set(0, 1.62, -halfZ + 0.075);
+    g.add(this.mirror);
+    const frameMat = m(0x9aa3ad, { metalness: 0.8, roughness: 0.3 });
+    box(1.6, 0.05, 0.03, 0, 0.845, -halfZ + 0.065, frameMat);
+    box(1.6, 0.05, 0.03, 0, 2.395, -halfZ + 0.065, frameMat);
+    box(0.05, 1.6, 0.03, -0.775, 1.62, -halfZ + 0.065, frameMat);
+    box(0.05, 1.6, 0.03, 0.775, 1.62, -halfZ + 0.065, frameMat);
     this.group = g;
     g.position.set(x, this.y, z);
     builder.scene.add(g);

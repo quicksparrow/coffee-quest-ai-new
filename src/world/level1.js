@@ -78,25 +78,29 @@ export function buildLevel(b, state) {
   const winGlass = b.surface('glass', 0xa9c7dc, { opacity: 0.22 });
   const frame = b.surface('metal', 0x3d434b);
   const exterior = (axis, fixed, from, to, skip = []) => {
-    const t = 0.1;
-    const box = (a1, y1, a2, y2, opts) => (axis === 'x'
+    // Thicknesses step down (wall 20 cm, frames 14 cm, glass 4 cm) so no two faces ever sit
+    // in the same plane, which is what made the glass and frames flicker.
+    const box = (a1, y1, a2, y2, t, opts) => (axis === 'x'
       ? b.box(a1, y1, fixed - t, a2, y2, fixed + t, opts)
       : b.box(fixed - t, y1, a1, fixed + t, y2, a2, opts));
     for (const [y0, top] of [[0, 4.0], [F2, 7.2]]) {
-      box(from, y0, to, y0 + 0.85, {});                                   // sill wall
-      box(from, y0 + 2.75, to, top, { cast: false });                    // header
       const gaps = skip.filter((g) => g.y0 === y0);
+      // Sill walls between the gaps (no sill across a doorway).
+      let s0 = from;
+      for (const g of [...gaps, { a: to, b: to }]) { if (g.a > s0) box(s0, y0, g.a, y0 + 0.85, 0.1, {}); s0 = g.b; }
+      box(from, y0 + 2.75, to, top, 0.1, { cast: false });                  // header
       let a = from;
       for (const g of [...gaps, { a: to, b: to }]) {
         if (g.a > a) {
-          box(a, y0 + 0.85, g.a, y0 + 2.75, { material: winGlass, see: false, cast: false });
-          for (let m = a; m <= g.a + 1e-3; m += (g.a - a) / Math.max(1, Math.round((g.a - a) / 1.6))) {
-            box(m - 0.04, y0 + 0.85, m + 0.04, y0 + 2.75, { material: frame, collide: false });   // mullion
+          box(a, y0 + 0.85, g.a, y0 + 2.75, 0.02, { material: winGlass, see: false, cast: false });
+          const n = Math.max(1, Math.round((g.a - a) / 1.6));
+          for (let k = 0; k <= n; k++) {
+            const m = a + ((g.a - a) * k) / n;
+            box(Math.max(a, m - 0.04), y0 + 0.85, Math.min(g.a, m + 0.04), y0 + 2.75, 0.07, { material: frame, collide: false });   // mullion
           }
-          box(a, y0 + 0.85, g.a, y0 + 0.9, { material: frame, collide: false });
-          box(a, y0 + 2.7, g.a, y0 + 2.75, { material: frame, collide: false });
+          box(a, y0 + 0.85, g.a, y0 + 0.9, 0.07, { material: frame, collide: false });
+          box(a, y0 + 2.7, g.a, y0 + 2.75, 0.07, { material: frame, collide: false });
         }
-        if (g.solid) box(g.a, y0 + 0.85, g.b, y0 + 2.75, {});
         a = g.b;
       }
     }
@@ -105,11 +109,13 @@ export function buildLevel(b, state) {
   exterior('x', 24, 0, 32, [{ y0: 0, a: 13, b: 17 }]);
   exterior('z', 0, 0, 24);
   exterior('z', 32, 0, 24);
-  // Front entrance: glass doors (closed: you're already in) under a frame.
-  b.box(13, 0, 23.93, 17, 2.75, 24.07, { material: winGlass, see: false, cast: false });
-  [13, 15, 17].forEach((x) => b.box(x - 0.05, 0, 23.9, x + 0.05, 2.75, 24.1, { material: frame, collide: false }));
-  b.box(13, 2.7, 23.9, 17, 2.8, 24.1, { material: frame, collide: false });
-  [14.8, 15.2].forEach((x) => b.box(x - 0.015, 0.9, 23.85, x + 0.015, 1.6, 23.9, { material: frame, collide: false }));   // handles
+  // Front entrance: two pairs of glass doors (closed: you're already in) in a steel frame.
+  b.box(13, 0, 23.98, 17, 2.7, 24.02, { material: winGlass, see: false, cast: false });
+  [13.04, 15, 16.96].forEach((x) => b.box(x - 0.04, 0, 23.93, x + 0.04, 2.7, 24.07, { material: frame, collide: false }));
+  b.box(13, 2.7, 23.93, 17, 2.78, 24.07, { material: frame, collide: false });
+  b.box(13, 0, 23.93, 17, 0.04, 24.07, { material: frame, collide: false });
+  [14.85, 15.15].forEach((x) => b.box(x - 0.015, 0.85, 23.84, x + 0.015, 1.65, 23.88, { material: frame, collide: false }));   // handles (inside)
+  [14.85, 15.15].forEach((x) => b.box(x - 0.015, 0.85, 24.12, x + 0.015, 1.65, 24.16, { material: frame, collide: false }));   // handles (outside)
   // Floor 2 ceiling (the ground floor's ceiling is the underside of the Floor 2 slab).
   b.box(0, 7.0, 0, 32, 7.2, 24, { color: 0xe9ecef, collide: false, cast: false });
 
@@ -149,7 +155,10 @@ export function buildLevel(b, state) {
     const zs = z0 + i * (run / steps);
     b.box(20.05, 0, zs, 22.95, (i + 0.7) * (rise / steps), zs + run / steps, { color: C.stairs, collide: false });
   }
-  b.box(22.9, F2, 0, 23.1, F2 + 1.05, 8, { color: C.rail });   // railing along the stair opening
+  // Floor 2: the stairwell is walled in, so the top of the flight is a proper landing rather than
+  // a balcony over an empty, unreachable strip.
+  b.vwall(23, 0, 8, F2, 3);
+  b.hwall(8, 23, 26, F2, 3);
 
   // ---------- Ground floor interior ----------
   const G = 3.7;
@@ -242,9 +251,10 @@ export function buildLevel(b, state) {
   });
   doors.push(meetingDoor);
 
-  decorate(b);
+  const decor = decorate(b);
 
   return {
+    decor,
     doors,
     elevator,
     landingDoors,
