@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Input } from './core/input.js';
 import { Sfx } from './core/audio.js';
-import { Game } from './core/game.js';
+import { Game, RATINGS } from './core/game.js';
 import { Builder } from './world/builder.js';
 import { buildLevel, F2 } from './world/level1.js';
 import { Player } from './actors/player.js';
@@ -241,7 +241,9 @@ async function boot() {
       $('end-eyebrow').textContent = `Arrived ${r.arrived}`;
       $('end-title').textContent = r.late ? 'Late, but you made it' : 'Right on time';
       $('end-line').textContent = r.quote || (r.late ? 'Everyone saw you walk in.' : 'Nobody suspects the coffee run.');
-      $('end-rating').textContent = `${r.cups} cup${r.cups > 1 ? 's' : ''} · ${r.rating}`;
+      $('end-rating').textContent = r.rating;
+      // The whole ladder, bottom to top, with yours lit up.
+      $('end-ladder').innerHTML = RATINGS.map((name, i) => `<li class="${i + 1 === r.cups ? 'on' : i + 1 < r.cups ? 'past' : ''}">${name}</li>`).join('');
       $('end-next').textContent = r.next || '';
       const cup = (full) => `<svg class="cup${full ? ' full' : ''}" viewBox="0 0 40 40"><path class="body" d="M8 12 H28 L26 34 H10 Z"/><path class="handle" d="M28 16 C36 16 36 26 27 26"/></svg>`;
       $('end-cups').innerHTML = [1, 2, 3, 4, 5].map((i) => cup(i <= r.cups)).join('');

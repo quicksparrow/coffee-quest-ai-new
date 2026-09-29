@@ -203,3 +203,15 @@ canvas#game:focus { outline: none; }
   .screen.start h1 { font-size: clamp(44px, 6vw, 64px); }
   .sam-intro { margin: 6px 0 0; padding: 8px 12px; }
 }
+
+/* End card: the rating ladder (1 to 5 cups, each with a name). */
+.rating-box { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
+.rating-label { margin: 0; font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.rating-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.rating-row .cups { margin-top: 0; }
+.ladder { display: flex; flex-wrap: wrap; gap: 4px 0; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: #7f8a98; }
+.ladder li { white-space: nowrap; }
+.ladder li:not(:last-child)::after { content: '›'; margin: 0 7px; color: #56606d; }
+.ladder li.past { color: #b7c0cb; }
+.ladder li.on { color: var(--espresso); font-weight: 600; }
+@media (max-height: 700px) { .rating-box { padding: 8px 12px; gap: 4px; } }

@@ -46,7 +46,7 @@ Linda (the VP) is presenting in 2B and Sam, your work buddy who texts you tips (
 
 Route bonuses (each once per round): tailgating the turnstiles +250, the mailroom shortcut +150, slipping through the stair door behind Rita or someone arriving +250, and walking into 2B through the back door +300. Other scoring: first coffee +500, a second kind of coffee +750, refills +100, sips +150 each, visitor pass +150, slipping away from someone +100, each conversation -300, never pulled into one +2000, time to spare +20 per real second, late -40 per real second.
 
-Cups on the score card: 1,000 points for 2 cups, 2,000 for 3, 3,200 for 4 and 4,500 for 5 (a perfect run, with both kinds of coffee, on time and never stopped for a chat, is always 5). Arriving late caps it at 3. The card tells you how many points the next cup needs.
+The score card ends with your rating, 1 to 5 cups, each with a name: Lukewarm Leftover (under 1,000 points), Per My Last Email (1,000), Circle-Back Barista (2,000), Espresso Express (3,200) and Caffeinated Ninja (4,500). A perfect run (both coffees, on time, never stopped for a chat) is always Caffeinated Ninja, and arriving late caps you at Circle-Back Barista. The card shows the whole ladder with yours lit up, and what the next rung needs. A lobby latte is 3 sips and a kitchen espresso 2 (150 points a sip).
 
 ## Coworkers
 

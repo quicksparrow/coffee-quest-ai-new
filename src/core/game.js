@@ -5,7 +5,8 @@ const GAME_SECONDS_PER_REAL = 300 / ROUND_SECONDS;
 const START_MIN = 8 * 60 + 55;
 const WARN_AT = ROUND_SECONDS - 120 / GAME_SECONDS_PER_REAL;   // 08:58
 
-const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
+// The end-of-round rating, 1 to 5 cups (a perfect run is always the top one).
+export const RATINGS = ['Lukewarm Leftover', 'Per My Last Email', 'Circle-Back Barista', 'Espresso Express', 'Caffeinated Ninja'];
 const CUP_AT = [0, 1000, 2000, 3200, 4500];   // points for 1…5 cups (a perfect run is always 5)
 const LATE_MAX_CUPS = 3;
 const SMOKE_WAIT = 3;       // wait at the stair exit this long before someone opens it (seconds)…
@@ -55,7 +56,7 @@ export class Game {
     const s = this.state;
     s.hasBadge = false;
     s.smokerOpen = false;
-    s.coffee = { obtained: false, latte: false, espresso: false, sips: 0, count: 0 };
+    s.coffee = { obtained: false, latte: false, espresso: false, sips: 0, size: 3, count: 0 };
     this.elapsed = 0;
     this.smokeIn = SMOKE_WAIT;
     this.smokeOpenT = 0;
@@ -184,7 +185,8 @@ export class Game {
     const firstOfKind = !c[kind];
     c[kind] = true;
     c.count += 1;
-    c.sips = kind === 'latte' ? 3 : Math.min(3, c.sips + 2);
+    c.size = kind === 'latte' ? 3 : 2;          // lobby latte: 3 sips; kitchen espresso: 2
+    c.sips = c.size;
     if (!c.obtained) {
       c.obtained = true;
       this.score('First coffee', 500);
@@ -521,7 +523,7 @@ export class Game {
       sub = `Late by ${Math.floor(ls / 60)}m ${String(ls % 60).padStart(2, '0')}s`;
     }
     this.hud.setClock(this.clockText(), sub, late ? 'late' : warn ? 'warn' : '');
-    this.hud.setItems({ floor: this.player.floor === 0 ? 'Lobby' : 'Floor 2', badge: s.hasBadge, coffee: s.coffee.obtained, sips: s.coffee.sips });
+    this.hud.setItems({ floor: this.player.floor === 0 ? 'Lobby' : 'Floor 2', badge: s.hasBadge, coffee: s.coffee.obtained, sips: s.coffee.sips, size: s.coffee.size });
 
     // Prompt: busy > interaction > sip > tutorial
     const el = this.level.elevator;
@@ -582,9 +584,9 @@ export class Game {
     const cups = late > 0 ? Math.min(earned, LATE_MAX_CUPS) : earned;
     const fmt = (n) => n.toLocaleString('en-US');
     let next;
-    if (cups === 5) next = 'Top rating.';
-    else if (late > 0 && cups === LATE_MAX_CUPS) next = `Late arrivals top out at ${LATE_MAX_CUPS} cups. Be there by 9:00 for more.`;
-    else next = `${cups + 1} cups at ${fmt(CUP_AT[cups])} points${late > 0 ? ` (${LATE_MAX_CUPS} max when you're late)` : ''}.`;
+    if (cups === 5) next = 'Top of the ladder. Nobody even saw you.';
+    else if (late > 0 && cups === LATE_MAX_CUPS) next = `Late arrivals top out at ${RATINGS[LATE_MAX_CUPS - 1]}. Be there by 9:00 to climb higher.`;
+    else next = `Next up: ${RATINGS[cups]} at ${fmt(CUP_AT[cups])} points.${late > 0 ? ` Late arrivals top out at ${RATINGS[LATE_MAX_CUPS - 1]}.` : ` Both coffees, on time, no chats = ${RATINGS[4]}.`}`;
     if (late > 0) this.sfx.deny(); else this.sfx.win();
     // The people in 2B react (see Stealth.react); the score card follows a few seconds later.
     const scene = this.stealth?.react({ late: late > 0, lateBy: late, cups, lastTalker: this.lastTalker, chats: this.conversations });

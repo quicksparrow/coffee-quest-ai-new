@@ -35,14 +35,14 @@ export class Hud {
     }
   }
 
-  setItems({ floor, badge, coffee, sips }) {
-    const sig = `${floor}|${badge}|${coffee}|${sips}`;
+  setItems({ floor, badge, coffee, sips, size = 3 }) {
+    const sig = `${floor}|${badge}|${coffee}|${sips}|${size}`;
     if (sig === this._items) return;
     this._items = sig;
     this.el.floor.textContent = floor;
     this.el.badge.hidden = !badge;
     this.el.coffee.hidden = !coffee;
-    this.el.sips.textContent = coffee ? ('●'.repeat(sips) + '○'.repeat(Math.max(0, 3 - sips))) : '';
+    this.el.sips.textContent = coffee ? ('●'.repeat(sips) + '○'.repeat(Math.max(0, size - sips))) : '';   // a latte has 3 sips, an espresso 2
   }
 
   // key: 'Space' etc. or null; progress: 0..1 or null
