@@ -122,7 +122,10 @@ h2 { margin: 0; font: 600 44px/1 var(--display); text-transform: uppercase; }
 .press kbd { font-size: 13px; }
 .small { margin: 0; font-size: 13px; color: var(--muted); }
 .build { color: #7f8a98; }
-.loading { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #d4dae2; }
+.loading { display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: #d4dae2; max-width: 360px; }
+.load-text { display: flex; align-items: center; gap: 10px; }
+.load-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+#load-fill { height: 100%; width: 100%; background: var(--espresso); transform: scaleX(0); transform-origin: 0 50%; transition: transform .25s ease-out; }
 .loading .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--espresso); animation: pulse 0.9s ease-in-out infinite; }
 .notice { margin: 0; padding: 14px 16px; border-left: 3px solid var(--espresso); background: rgba(255,255,255,.06); border-radius: 0 8px 8px 0; }
 
@@ -185,3 +188,18 @@ canvas#game:focus { outline: none; }
 .sam-intro p { margin: 0; font-size: 14px; line-height: 1.45; color: #d4dae2; }
 .sam-intro kbd { font-size: 11px; padding: 2px 5px; }
 .end-next { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+
+/* Short windows (e.g. 1280×600, a laptop with the browser's toolbars): tighten the end card so
+   "Press Enter to play again" stays on screen. */
+@media (max-height: 700px) {
+  .card { gap: 8px; }
+  h2 { font-size: 34px; }
+  .lede { font-size: 15px; }
+  .cup { width: 28px; height: 28px; }
+  .rating { font-size: 22px; }
+  .breakdown { font-size: 13px; }
+  .breakdown td { padding: 2px 0; }
+  .total strong { font-size: 22px; }
+  .screen.start h1 { font-size: clamp(44px, 6vw, 64px); }
+  .sam-intro { margin: 6px 0 0; padding: 8px 12px; }
+}

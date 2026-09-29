@@ -66,7 +66,7 @@
         <p><b>Sam</b> is your work buddy, already sitting in Meeting 2B. Sam texts you tips on the way up. Turn them off with <kbd>H</kbd> in the pause menu.</p>
       </div>
       <div id="start-ready">
-        <div class="picker" id="picker" aria-label="Choose your commuter">
+        <div class="picker" id="picker" aria-label="Choose your commuter" hidden>
           <div class="row active" data-row="kind"><span class="row-label">Play as</span><div class="opts" id="opt-kind"></div></div>
           <p class="small char-error" id="char-error" hidden></p>
           <p class="picker-hint"><kbd>←</kbd><kbd>→</kbd> switch</p>
@@ -91,7 +91,10 @@
       <div id="start-notice" hidden>
         <p class="notice"><b>Coffee Quest is played with a keyboard.</b> Open this page on a laptop or desktop computer to play. Phone and tablet controls are on the way.</p>
       </div>
-      <p id="loading" class="small loading"><span class="dot"></span>Getting the office ready…</p>
+      <div id="loading" class="loading" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="load-text"><span class="dot"></span><span id="load-label">Getting the office ready…</span></div>
+        <div class="load-bar"><div id="load-fill"></div></div>
+      </div>
     </div>
   </section>
 

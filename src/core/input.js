@@ -13,7 +13,11 @@ export class Input {
       if (!e.repeat) this.pressed.add(e.code);
       this.held.add(e.code);
     });
-    window.addEventListener('keyup', (e) => this.held.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.held.delete(e.code);
+      // macOS doesn't send keyup for keys released while ⌘ is down: clear everything with it.
+      if (e.key === 'Meta') this.held.clear();
+    });
     window.addEventListener('blur', () => this.held.clear());
   }
   down(...codes) { return codes.some((c) => this.held.has(c)); }

@@ -18,7 +18,7 @@ export class Beacons {
       { icon: 'coffee', title: 'Coffee', sub: 'Lobby café · latte', p: P.cafe },
       { icon: 'coffee', title: 'Coffee', sub: 'Kitchen · espresso', p: P.espresso },
       { icon: 'badge', title: 'Visitor pass', sub: 'Reception', p: P.reception, color: BLUE, show: () => !state.hasBadge },
-      { icon: 'badge', title: 'Turnstiles', sub: 'Pass, or tailgate Ben', p: P.turnstiles, color: BLUE, show: () => !state.hasBadge },
+      { icon: 'badge', title: 'Turnstiles', sub: 'Pass needed, or tailgate', p: P.turnstiles, color: BLUE, show: () => !state.hasBadge },
       { icon: 'door', title: 'Propped door', sub: 'Mailroom · to the stairs', p: v(26, 0, 21.35), color: BLUE },
       { icon: 'stairs', title: 'Stairs', sub: 'No badge needed', p: P.stairsFront, color: BLUE },
       { icon: 'lift', title: 'Elevator', sub: 'Behind the turnstiles', p: P.callG, color: BLUE },

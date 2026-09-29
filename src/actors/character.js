@@ -97,8 +97,10 @@ const directTextures = (parser) => ({
     const img = json.images[def.extensions?.EXT_texture_webp?.source ?? def.source];
     if (img?.bufferView === undefined) return null; // not embedded: let three.js handle it
     const bytes = await parser.getDependency('bufferView', img.bufferView);
-    const bitmap = await createImageBitmap(new Blob([bytes], { type: img.mimeType || 'image/webp' }),
-      { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    const blob = new Blob([bytes], { type: img.mimeType || 'image/webp' });
+    // Older Safari/Firefox reject these options: fall back to the plain decode.
+    const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
+      .catch(() => createImageBitmap(blob));
     const tex = new THREE.Texture(bitmap);
     tex.name = def.name || img.name || '';
     tex.flipY = false;
@@ -113,11 +115,14 @@ const directTextures = (parser) => ({
   },
 });
 
-export async function loadCharacterAssets(base = './models/') {
+// onEach(): called as each of the four files finishes (for the loading bar).
+export async function loadCharacterAssets(base = './models/', onEach = () => {}) {
   const loader = new GLTFLoader().register(directTextures);
   const [woman, man, a1, a2] = await Promise.all(MODEL_NAMES.map(async (name) => {
     const bytes = await modelBytes(base, name);
-    return loader.parseAsync(bytes, base);
+    const gltf = await loader.parseAsync(bytes, base);
+    onEach();
+    return gltf;
   }));
   const clips = {};
   [...a1.animations, ...a2.animations].forEach((c) => { clips[c.name] = c; });
@@ -199,6 +204,11 @@ export const SIP_SECONDS = SIP.up + SIP.hold + SIP.down;
 // (Not the neck or head: the clip turns the head to the left, toward a cup held at the side.)
 const SIP_BONES = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_.*l$/;
 
+// Scratch space for the arm IK (see holdCup / solveArm).
+const V3 = () => new THREE.Vector3();
+const IKV = { x: V3(), y: V3(), scale: V3(), pole: V3(), pole2: V3(), defPole: V3(), a: V3(), b: V3(), c: V3(), toT: V3(), elbow: V3(), wristAt: V3(), cur: V3(), want: V3() };
+const IKQ = { rq: new THREE.Quaternion(), delta: new THREE.Quaternion(), world: new THREE.Quaternion(), parent: new THREE.Quaternion() };
+
 export class Character {
   constructor(assets, kind) {
     this.kind = kind;
@@ -233,8 +243,11 @@ export class Character {
     this.actions.cheer.setLoop(THREE.LoopOnce, 1);
     this.actions.cheer.clampWhenFinished = true;
     // Every material stays in the transparent pass so the camera fade never recompiles a shader.
+    // Each character gets its own copy of every material (the fade is per character; sharing
+    // the eyes' material made everyone's eyes fade with whoever was near a wall).
     this.root.traverse((o) => {
       if (!o.isMesh) return;
+      if (o !== this.body && !(this.hairMats || []).includes(o.material)) o.material = o.material.clone();
       o.renderOrder = 3;
       o.material.transparent = true;
       this.mats.push(o.material);
@@ -333,48 +346,50 @@ export class Character {
     // Cup orientation from its axis (up) and the direction of the hand holding it (outside,
     // slightly toward the body while carrying).
     const handSide = tmp.copy(left).multiplyScalar(0.9).addScaledVector(fwd, -0.25 * (1 - lift)).normalize();
-    const Y = cupUp.clone().lerp(up, 1 - lift).normalize();
+    const Y = IKV.y.copy(cupUp).lerp(up, 1 - lift).normalize();
     const Z = handSide.addScaledVector(Y, -handSide.dot(Y)).normalize();
-    const X = new THREE.Vector3().crossVectors(Y, Z);
+    const X = IKV.x.crossVectors(Y, Z);
     q[3].setFromRotationMatrix(m[0].makeBasis(X, Y, Z));
     // Hand transform that puts the cup there (cup = hand * cupLocal), then reach for it.
-    const cupScale = cup.getWorldScale(new THREE.Vector3());
+    const cupScale = cup.getWorldScale(IKV.scale);
     m[0].compose(cupPos, q[3], cupScale).multiply(m[1].copy(cup.matrix).invert());
     wrist.setFromMatrixPosition(m[0]);
     const handQ = q[2].setFromRotationMatrix(m[1].extractRotation(m[0]));
-    const pole = new THREE.Vector3(0.35, -1, -0.8).lerp(new THREE.Vector3(0.45, -1, 0.35), lift);
+    const pole = IKV.pole.set(0.35, -1, -0.8).lerp(IKV.pole2.set(0.45, -1, 0.35), lift);
     this.solveArm(wrist, handQ, pole);
     return sipping;
   }
 
   // Two-bone IK for the left arm: shoulder -> elbow -> wrist, elbow pointing down and out.
-  solveArm(target, handQ, poleModel = new THREE.Vector3(0.9, -1, -0.35)) {
+  // (Runs every frame for the player: scratch vectors instead of new ones, so no GC hiccups.)
+  solveArm(target, handQ, poleModel = IKV.defPole.set(0.9, -1, -0.35)) {
     const { upper, lower, hand } = this.ik;
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const { a, b, c, toT, pole, elbow, wristAt, cur, want } = IKV;
+    const { rq, delta, world, parent } = IKQ;
     upper.getWorldPosition(a); lower.getWorldPosition(b); hand.getWorldPosition(c);
     const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
-    const toT = target.clone().sub(a);
+    toT.copy(target).sub(a);
     const d = THREE.MathUtils.clamp(toT.length(), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3);
     const dir = toT.normalize();
-    const rq = this.root.getWorldQuaternion(new THREE.Quaternion());
-    const pole = poleModel.clone().applyQuaternion(rq);   // where the elbow points (model space)
+    this.root.getWorldQuaternion(rq);
+    pole.copy(poleModel).applyQuaternion(rq);   // where the elbow points (model space)
     pole.addScaledVector(dir, -pole.dot(dir)).normalize();
     const cosA = THREE.MathUtils.clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
-    const elbow = a.clone().addScaledVector(dir, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));
-    const wristAt = a.clone().addScaledVector(dir, d);
+    elbow.copy(a).addScaledVector(dir, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));
+    wristAt.copy(a).addScaledVector(dir, d);
     const aim = (bone, from, childNow, childWant) => {
-      const cur = childNow.clone().sub(from).normalize();
-      const want = childWant.clone().sub(from).normalize();
-      const delta = new THREE.Quaternion().setFromUnitVectors(cur, want);
-      const world = bone.getWorldQuaternion(new THREE.Quaternion()).premultiply(delta);
-      const parent = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      cur.copy(childNow).sub(from).normalize();
+      want.copy(childWant).sub(from).normalize();
+      delta.setFromUnitVectors(cur, want);
+      bone.getWorldQuaternion(world).premultiply(delta);
+      bone.parent.getWorldQuaternion(parent);
       bone.quaternion.copy(parent.invert().multiply(world));
       bone.updateMatrixWorld(true);
     };
     aim(upper, a, b, elbow);
     lower.getWorldPosition(b); hand.getWorldPosition(c);
     aim(lower, b, c, wristAt);
-    const parent = lower.getWorldQuaternion(new THREE.Quaternion());
+    lower.getWorldQuaternion(parent);
     hand.quaternion.copy(parent.invert().multiply(handQ));
     hand.updateMatrixWorld(true);
   }

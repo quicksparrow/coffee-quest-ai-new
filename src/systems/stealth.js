@@ -264,6 +264,7 @@ export class Stealth {
       cw.waitT = cw.stops[0].wait;
       cw.sus = 0;
       cw.cooldown = 0;
+      cw.slipScored = false;
       cw.lostT = 0;
       cw.chaseT = 0;
       cw.replan = 0;
@@ -423,16 +424,27 @@ export class Stealth {
         }
         const d = tmpV.subVectors(t, c.pos);
         const flat = Math.hypot(d.x, d.z);
-        const step = COMMUTER_SPEED * dt;
-        if (flat <= step) { c.pos.copy(t); c.script.shift(); } else c.pos.addScaledVector(d, step / flat);
-        if (flat > 0.01) c.yaw += angleDiff(yawTo(d.x, d.z), c.yaw) * Math.min(1, dt * 8);
-        const p = c.pos;
+        const p = c.pos;             // doors and gates they're at open for them
         if (p.y < 2 && Math.hypot(p.x - 15, p.z - 24) < 2.4) entry = true;
         if (p.y < 2 && Math.hypot(p.x - COMMUTER_GATE, p.z - 11) < 1.6) {
           nearGate = true;
           if (p.z > 11.6 && !c.beeped) { c.beeped = true; this.onBadge?.(); }
         }
         if (p.y > 3 && Math.hypot(p.x - 21.5, p.z - 9) < 1.7) stairDoor = true;
+        // You're standing right in their way: they stop and say so (and after a moment squeeze past).
+        const P = this.player.position;
+        const px = P.x - c.pos.x, pz = P.z - c.pos.z, pd = Math.hypot(px, pz);
+        const inWay = !this.player.hidden && Math.abs(P.y - c.pos.y) < 1 && pd < 0.95 && flat > 0.01 && (px * d.x + pz * d.z) / (pd * flat + 1e-6) > 0.35;
+        c.blockT = inWay ? (c.blockT || 0) + dt : 0;
+        if (inWay && c.blockT < 2.5) {
+          c.moving = false;
+          if (c.blockT < dt * 1.5) { c.say = 'Excuse me!'; c.sayT = 1.8; }
+          continue;
+        }
+        c.moving = true;
+        const step = COMMUTER_SPEED * dt;
+        if (flat <= step) { c.pos.copy(t); c.script.shift(); } else c.pos.addScaledVector(d, step / flat);
+        if (flat > 0.01) c.yaw += angleDiff(yawTo(d.x, d.z), c.yaw) * Math.min(1, dt * 8);
       }
     }
     // Their badge opens the gate as they reach it; it stays open a moment after they're through.
@@ -586,8 +598,11 @@ export class Stealth {
           const lurking = P.hidden && cw.def.persistent;
           const giveUp = (P.hidden && !lurking) || !sameFloor || P.riding || cw.chaseT > 25 || (!cw.def.persistent && cw.lostT > 1.8);
           if (giveUp) {
-            if (P.hidden && !cw.slipped) { cw.slipped = true; events.slipped ||= cw; }
+            // Slipping someone scores once per person per round, and they need a while before
+            // they can notice you again (no hide / step out / hide farming).
+            if (P.hidden && !cw.slipped) { cw.slipped = true; if (!cw.slipScored) { cw.slipScored = true; events.slipped ||= cw; } }
             cw.state = 'search'; cw.searchT = 1.8; cw.sus = 0; cw.route = null;
+            if (P.hidden) cw.cooldown = 10;
             cw.say = cw.def.persistent ? 'Okay. I will ask someone else.' : 'Huh. Where did they go?'; cw.sayT = 2;
             break;
           }

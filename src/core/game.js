@@ -73,6 +73,7 @@ export class Game {
     this.inMeetingNoCoffee = false;
     this.routes = new Set();          // route bonuses already scored this round
     this.lastPos = null;
+    this.commuterDoorT = 0;
     this.elDoorsWere = this.level.elevator.doorsOpen;
     this.tut = { i: 0, t: 0 };
     this.stats = { moved: false, turned: false, aboutFaced: false, hurried: false, crouched: false, xray: false };
@@ -249,7 +250,7 @@ export class Game {
     const el = this.level.elevator;
     if (Z.inCab(p)) {
       if (el.moving) return { title, sub: el.target === 1 ? 'Going up…' : 'Going down…', pt: P.meeting };
-      if (f === 0) return { title, sub: 'Wait, or press Space to go up', pt: P.meeting };
+      if (f === 0) return { title, sub: el.departIn != null ? 'Wait, or press Space to go up' : 'Press Space to go up', pt: P.meeting };
     }
     if (f === 0) {
       if (Z.stairWalkway(p)) return { title, sub: 'Up the stairs', pt: P.landing };
@@ -294,14 +295,14 @@ export class Game {
     const el = this.level.elevator;
     const ev = el.update(dt, p, this.level.landingDoors);
     if (ev.arrived) { this.sfx.ding(); if (ev.inside && el.floor === 1) this.hint('floor2'); }
-    if (ev.inside && el.phase === 'idle' && el.doorsOpen && el.floor === 0) this.hint('elevator');
+    if (ev.inside && el.departIn != null && el.floor === 0) this.hint('elevator');
     // The doors opening for you (not with you inside): sometimes Gary is already in there.
     if (el.doorsOpen && !this.elDoorsWere && !ev.inside) this.stealth?.elevatorArrived();
     this.elDoorsWere = el.doorsOpen;
     const rideY = ev.inside && el.moving ? el.y : null;
     let canMove = true;
     if (this.busy) {
-      if (input.forward || input.aboutFace) {
+      if (input.forwardPressed || input.aboutFace) {        // a fresh press, not ↑ still held from walking up
         this.busy = null;
         this.player.idleStyle = null;
         this.hud.pop('Cancelled', 'bad');
@@ -339,7 +340,7 @@ export class Game {
       }, ev);
       if (ev.noticed) this.hint('noticed', `Uh oh, ${ev.noticed.def.name} spotted you. Get out of sight, or press C to crouch.`);
       if (ev.spotted) { this.hud.pop(`${ev.spotted.def.name} wants a word!`, 'bad'); this.sfx.deny(); }
-      if (ev.slipped) { this.score('Slipped away', 100, true); this.hint('slipped'); }
+      if (ev.slipped) { this.score('Slipped away', 100, true); if (!ev.slipped.def.persistent) this.hint('slipped'); }
       if (ev.riderSeen) this.hint('rider');
       if (ev.caught) {
         const cw = ev.caught;
@@ -415,6 +416,8 @@ export class Game {
       if (d.justOpened && Math.abs(d.base.y - pp.y - 1.2) < 2) this.sfx.door(1 - Math.hypot(d.base.x - pp.x, d.base.z - pp.z) / 12);
     }
 
+    // Someone arriving just badged through the stair door (it stays open a moment after them).
+    this.commuterDoorT = s.commuterDoor ? 1.5 : Math.max(0, (this.commuterDoorT || 0) - dt);
     // (Positions only change in the physics step after this update, so compare with the last one.)
     if (this.lastPos) this.checkRoutes(this.lastPos, pp);
     (this.lastPos ||= new THREE.Vector3()).copy(pp);
@@ -422,7 +425,11 @@ export class Game {
     // Situational hints
     const Z = this.level.zones;
     if (this.elapsed > 1.2) this.hint('start');
-    if (Z.turnstileFront(pp) && !s.hasBadge) this.hint('turnstile');
+    if (Z.turnstileFront(pp) && !s.hasBadge) {
+      // Once everyone has arrived for work there's nobody left to tailgate.
+      const arriving = this.stealth?.commuters.some((c) => c.phase === 'waiting' || (c.phase === 'walking' && c.pos.y < 2 && c.pos.z > 11));
+      this.hint('turnstile', arriving ? HINTS.turnstile : "No badge again? Ask reception for a visitor pass, or sneak round through the mailroom: that door is always propped open.");
+    }
     if (Z.stairDoorInside(pp) && !s.smokerOpen) this.hint('stairdoor');
     if (this.elapsed > 50 && !this.stats.xray) this.hint('xray');
     if (this.elapsed > WARN_AT) this.hint('warn');
@@ -433,8 +440,8 @@ export class Game {
     // Floor change → move the shadow light
     if (this.player.floor !== this.lastFloor) { this.lastFloor = this.player.floor; this.onFloorChange(this.lastFloor); }
 
-    // Arrival
-    if (Z.meeting(pp)) {
+    // Arrival (not while someone's still talking at you in the doorway)
+    if (Z.meeting(pp) && !st?.conversation) {
       if (s.coffee.obtained) { this.finish(); return; }
       if (!this.inMeetingNoCoffee) { this.hint('nocoffee'); this.hud.pop('Coffee first!', 'bad'); }
       this.inMeetingNoCoffee = true;
@@ -469,7 +476,7 @@ export class Game {
     // Up the stairs and in through the badge door behind Rita (or someone arriving for work).
     if (f2 && a.z <= 9 && b.z > 9 && b.x > 20.5 && b.x < 22.5) {
       if (s.smokerOpen) this.route('stairdoor', 'Slipped in behind Rita', 250);
-      else if (s.commuterDoor || this.level.stairDoor.open > 0.3) this.route('stairdoor', 'Tailgated the stair door', 250);
+      else if (this.commuterDoorT > 0) this.route('stairdoor', 'Tailgated the stair door', 250);
     }
   }
 
@@ -551,6 +558,7 @@ export class Game {
   }
 
   finish() {
+    this.setXray(false);
     this.over = true;
     this.inMeeting = true;
     this.player.moving = false;

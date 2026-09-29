@@ -163,6 +163,9 @@ export class Sfx {
     const m = this.music, ctx = this.ctx;
     if (!m || m.paused) return;
     const eighth = 60 / BPM / 2;
+    // After a stall (a busy frame, a throttled background tab), skip the missed notes rather
+    // than playing them all at once.
+    if (m.next < ctx.currentTime) m.next = ctx.currentTime + 0.05;
     while (m.next < ctx.currentTime + 0.25) {
       const i = m.step % 32;                     // 8 eighths per bar, 4 bars
       const bar = Math.floor(i / 8), e = i % 8;

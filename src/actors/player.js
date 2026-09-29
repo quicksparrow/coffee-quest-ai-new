@@ -113,6 +113,8 @@ export class Player {
     this.hidden = spot;
     this.crouching = false;
     this.hurrying = false;
+    this.moving = false;              // no walk cycle while tucked in
+    this.speed = 0;
     this.collider.setEnabled(false);
     this.teleport(spot.at, spot.yaw);
     this.idleStyle = spot.pose;

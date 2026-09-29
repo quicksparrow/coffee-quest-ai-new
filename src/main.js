@@ -15,13 +15,45 @@ import { nameTag } from './ui/sprites.js';
 import { Stealth, RAY_GROUPS } from './systems/stealth.js';
 import { Beacons } from './systems/beacons.js';
 
+const $ = (id) => document.getElementById(id);
+
+// Older Safari/Firefox lack roundRect (used for signs, name tags and speech bubbles).
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function roundRect(x, y, w, h, r = 0) {
+    const rr = Math.min(Array.isArray(r) ? r[0] : r, w / 2, h / 2);
+    this.moveTo(x + rr, y);
+    this.arcTo(x + w, y, x + w, y + h, rr);
+    this.arcTo(x + w, y + h, x, y + h, rr);
+    this.arcTo(x, y + h, x, y, rr);
+    this.arcTo(x, y, x + w, y, rr);
+    this.closePath();
+  };
+}
+
+// ---------- Loading bar ----------
+// Downloads fill the first half (physics engine, then the four character files); building the
+// office, the people and the shaders fill the rest.
+let loaded = 0;
+const setProgress = (frac, label) => {
+  loaded = Math.max(loaded, frac);
+  const fill = $('load-fill');
+  if (fill) fill.style.transform = `scaleX(${loaded.toFixed(3)})`;
+  $('loading')?.setAttribute('aria-valuenow', String(Math.round(loaded * 100)));
+  if (label && $('load-label')) $('load-label').textContent = label;
+};
+let downloads = 0;
+const downloaded = () => { downloads += 1; setProgress(0.08 + downloads * 0.09); };
+// Let the loading bar repaint between the heavy steps (a timeout too, since hidden tabs
+// don't run animation frames).
+const breathe = () => new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 60); });
+
 // Start downloading the physics engine right away, in parallel with everything else.
 // It is the largest file, lives in its own chunk, and stays cached between game updates.
-const rapierReady = import('@dimforge/rapier3d');
+const rapierReady = import('@dimforge/rapier3d').then((m) => { downloaded(); return m; });
 let charError = null;
-const charactersReady = loadCharacterAssets('./models/').catch((err) => { console.error(err); charError = err; return null; });
+const charactersReady = loadCharacterAssets('./models/', downloaded).catch((err) => { console.error(err); charError = err; return null; });
+setProgress(0.04);
 
-const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;       // fixed simulation step
 const MAX_STEPS = 5;       // never try to catch up more than this per frame
 const DEBUG = import.meta.env.DEV || new URLSearchParams(location.search).has('debug');
@@ -29,7 +61,7 @@ const DEBUG = import.meta.env.DEV || new URLSearchParams(location.search).has('d
 // ---------- Keyboard notice: phones, tablets and tiny windows ----------
 function needsKeyboardNotice() {
   const touchOnly = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
-  const tiny = window.innerWidth < 700 || window.innerHeight < 420;
+  const tiny = window.innerWidth < 460 || window.innerHeight < 340;   // (the claude.ai side panel is ~500–700 px wide)
   return touchOnly || tiny;
 }
 function refreshNotice() {
@@ -107,6 +139,10 @@ async function boot() {
   // ---------- Physics + level ----------
   const tBoot = performance.now();
   const RAPIER = await rapierReady;
+  // Signs and name tags are drawn into canvases once: give the web fonts a moment to arrive.
+  await Promise.race([document.fonts?.ready, new Promise((r) => setTimeout(r, 1500))]);
+  setProgress(0.5, 'Building the office…');
+  await breathe();
   const tRapier = performance.now();
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = STEP;
@@ -122,6 +158,8 @@ async function boot() {
 
   // ---------- Characters: Claire or Steven, plus the receptionist and barista ----------
   let charAssets = await charactersReady;
+  setProgress(0.62, 'Waking up your coworkers…');
+  await breathe();
   const LOOK_KEY = 'coffee-quest-commuter';
   const look = { kind: 0 };                          // Claire (blonde) or Steven (black hair), always the same look
   try { const saved = Number(localStorage.getItem(LOOK_KEY)); if (saved === 0 || saved === 1) look.kind = saved; } catch { /* private mode */ }
@@ -269,6 +307,7 @@ async function boot() {
   };
   const resume = () => {
     if (mode !== 'paused') return;
+    sfx.unlock();                     // the browser may have suspended audio while paused
     sfx.startAmbience();
     sfx.pauseMusic(false);
     input.endFrame();
@@ -316,17 +355,25 @@ async function boot() {
   // Coworker labels, sight cones and X-ray beacons are normally hidden: show them for the compile.
   stealth?.warmup(true);
   beacons.warmup(true);
+  setProgress(0.72, 'Brewing the coffee…');
+  await breathe();
   [...builder.textures, ...allTextures()].forEach((t) => renderer.initTexture(t));
   const tBuilt = performance.now();
+  setProgress(0.8);
+  await breathe();
   await renderer.compileAsync(scene, camera);
   const tCompiled = performance.now();
+  setProgress(0.95, 'Almost there…');
+  await breathe();
   renderer.render(scene, camera);             // also builds the shadow-map shaders
   if (spare) { scene.remove(spare.root); spare.root.position.set(0, 0, 0); }
   stealth?.warmup(false);
   beacons.warmup(false);
   if (DEBUG) console.log(`[boot] rapier ${Math.round(tRapier - tBoot)} ms, build ${Math.round(tBuilt - tRapier)} ms, compile ${Math.round(tCompiled - tBuilt)} ms, first frame ${Math.round(performance.now() - tCompiled)} ms, since page start ${Math.round(performance.now())} ms`);
+  setProgress(1);
   ready = true;
   $('loading').hidden = true;
+  $('picker').hidden = false;
   $('press-start').hidden = false;
 
   // ---------- Loop: fixed-step simulation, interpolated rendering ----------
@@ -455,6 +502,9 @@ async function boot() {
   function resetNpcs() { for (const n of npcs) { n.greeted = false; n.greetT = 0; } }
 
   function adaptQuality(raw) {
+    // A single stall (garbage collection, dragging the window, an offscreen iframe) says
+    // nothing about the GPU: leave it out rather than lowering the resolution for good.
+    if (raw > 0.1) return;
     quality.acc += raw;
     quality.frames += 1;
     quality.calm = Math.max(0, quality.calm - raw);

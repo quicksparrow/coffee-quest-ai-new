@@ -90,9 +90,11 @@ src/ui/                 HUD updates, name tags, speech bubbles and meters
 ## Performance notes
 
 - Physics runs at a fixed 60 steps per second and the player is drawn between steps, so movement is equally smooth on 60, 120 and 144 Hz screens.
-- Static geometry (walls, floors and all the furniture) is merged into one mesh per material, so the whole furnished office draws in about 130 draw calls per frame, shadows and characters included.
+- Static geometry (walls, floors and all the furniture) is merged into one mesh per material, so the whole furnished office draws in about 150–200 draw calls per frame, shadows and characters included. A simulation step (physics, coworkers, everything) takes about 0.2 ms.
 - Shaders are compiled and textures uploaded before "Press Enter" appears, so there is no hitch when play starts or when X-ray is first used.
-- Render resolution adapts: if the frame rate drops below about 45 fps the game lowers its render scale, and it never climbs back to a scale that was too slow.
+- Render resolution adapts: if the frame rate drops below about 45 fps the game lowers its render scale, and it never climbs back to a scale that was too slow. One-off stalls (garbage collection, dragging the window) are ignored.
+- The start screen shows a loading bar (physics engine, the four character files, then building the office and compiling shaders), and the character picker appears once everything is ready.
+- The camera never ends up inside your head: backed against a wall (a stair landing, a corner) it cranes up and looks down over your shoulder, and it eases between positions unless a wall actually comes between it and you.
 - The HUD only touches the page when a value changes. Menus redraw the 3D scene only when needed, and the game pauses when the tab or window loses focus.
 - Downloads are split so game updates only re-download the small game file: three.js, the physics code and the physics WebAssembly are separate, cacheable files.
 - Add `?debug` to the URL to log boot timings and expose `window.__coffeeQuest` for testing.
@@ -105,4 +107,4 @@ Claire, Steven, the lobby staff and the coworkers use Quaternius's **Universal B
 
 ## Status
 
-Stage 4 of the plan: a furnished, lit office with sound, coworkers with patrols, sight cones, conversations and hiding spots. Next: more routes (tailgating through badge doors, the kitchen back door into 2B), then polish and launch.
+Stage 5 of the plan: a furnished, lit office with sound, coworkers, hiding, the routes (tailgating, Gary, the back door) and a polish pass (loading bar, camera, bug fixes). Next: launch on Vercel or Netlify.
