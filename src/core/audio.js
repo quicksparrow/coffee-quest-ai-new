@@ -34,11 +34,6 @@ export class Sfx {
         this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
         const d = this.noise.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-        // Brown noise (smoother, for air conditioning rumble).
-        this.brown = this.ctx.createBuffer(1, len * 2, this.ctx.sampleRate);
-        const b = this.brown.getChannelData(0);
-        let last = 0;
-        for (let i = 0; i < b.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; b[i] = last * 3.5; }
       } catch { this.ctx = null; }
     }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
@@ -95,7 +90,8 @@ export class Sfx {
     this.tone(90, 0.3, 'sine', 0.02 * vol, 0.05);
   }
 
-  // ---------- Ambience: air conditioning, distant chatter, keyboards, the elevator ----------
+  // ---------- Ambience: keyboards upstairs and the elevator hum ----------
+  // (No continuous noise bed: filtered noise read as wind or surf rather than an office.)
   startAmbience() {
     if (!this.ctx || this.amb) return;
     const ctx = this.ctx;
@@ -103,24 +99,13 @@ export class Sfx {
     out.gain.setValueAtTime(0.0001, ctx.currentTime);
     out.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 1.5);
     out.connect(this.master);
-    const loop = (buffer) => { const s = ctx.createBufferSource(); s.buffer = buffer; s.loop = true; s.start(0, Math.random()); return s; };
-    // HVAC rumble
-    const hvac = loop(this.brown);
-    const hvacF = ctx.createBiquadFilter(); hvacF.type = 'lowpass'; hvacF.frequency.value = 320;
-    const hvacG = ctx.createGain(); hvacG.gain.value = 0.05;
-    hvac.connect(hvacF).connect(hvacG).connect(out);
-    // Murmur: band-limited noise whose loudness drifts like far-off conversation.
-    const mur = loop(this.noise);
-    const murF = ctx.createBiquadFilter(); murF.type = 'bandpass'; murF.frequency.value = 650; murF.Q.value = 1.4;
-    const murG = ctx.createGain(); murG.gain.value = 0.01;
-    mur.connect(murF).connect(murG).connect(out);
     // Elevator hum (silent until a ride)
     const hum = ctx.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 58;
     const humF = ctx.createBiquadFilter(); humF.type = 'lowpass'; humF.frequency.value = 180;
     const humG = ctx.createGain(); humG.gain.value = 0;
     hum.connect(humF).connect(humG).connect(out);
     hum.start();
-    this.amb = { out, sources: [hvac, mur, hum], murG, murF, humG, level: 0.01, t: 0, keysT: 2, floor: 0 };
+    this.amb = { out, sources: [hum], humG, keysT: 2 };
   }
 
   stopAmbience() {
@@ -137,14 +122,6 @@ export class Sfx {
     const a = this.amb;
     if (!a) return;
     const t = this.ctx.currentTime;
-    a.t -= dt;
-    if (a.t <= 0) {
-      // A new swell of chatter every second or two; the office upstairs is busier.
-      a.t = 0.8 + Math.random() * 1.6;
-      const base = floor === 1 ? 0.022 : 0.012;
-      a.murG.gain.setTargetAtTime(base * (0.4 + Math.random() * 0.9), t, 0.5);
-      a.murF.frequency.setTargetAtTime(500 + Math.random() * 400, t, 0.6);
-    }
     a.humG.gain.setTargetAtTime(riding ? 0.03 : 0, t, 0.3);
     // Someone typing somewhere upstairs.
     if (floor === 1) {
