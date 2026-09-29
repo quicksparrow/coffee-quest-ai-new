@@ -192,7 +192,8 @@ export function plant(b, M, x, y, z, h = 1.2, potR = 0.22, collide = false) {
   const p = piece(b, x, y, z, 0);
   if (collide) b.box(x - potR, y, z - potR, x + potR, y + 0.9, z + potR, { visible: false });
   p.cyl(potR, potR * 0.8, 0.42, M.pot, 0, 0, 0, 18);
-  p.cyl(potR * 0.92, potR * 0.92, 0.02, M.soil, 0, 0.4, 0, 18);
+  // Soil sits a little proud of the pot's top (their tops used to share a plane and flickered).
+  p.cyl(potR * 0.9, potR * 0.9, 0.025, M.soil, 0, 0.415, 0, 18);
   const n = 5;
   for (let i = 0; i < n; i++) {
     p.plane(h * 0.75, h * 0.85, M.leaves, 0, 0.4 + h * 0.42, 0, ((i + 0.5) / n) * Math.PI, { cast: false });
