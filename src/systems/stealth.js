@@ -355,8 +355,9 @@ export class Stealth {
   // ---------- The stair door smoker ----------
   startSmoker(playerX) {
     const s = this.smoker;
-    if (s.active) return;          // still on the way down: someone else holds the door this time
-    const x = playerX < 21.5 ? 22.3 : 20.7;
+    if (s.active && s.script.length) return;   // still on the way down: someone else holds the door this time
+    // Past you, but well inside the doorway (it's 20.6–22.4, and the door slides open to the east).
+    const x = playerX < 21.5 ? 21.95 : 21.05;
     s.script = [
       new THREE.Vector3(x, F2, 8.0),
       new THREE.Vector3(x, 1.9, 2.2),              // down flight B to the half landing…
@@ -365,13 +366,15 @@ export class Stealth {
       new THREE.Vector3(24.5, 1.9, 2.2),
       new THREE.Vector3(24.5, 0, 7.1),             // …down flight A, and out the east door
       new THREE.Vector3(24.5, 0, 8.0),
-      new THREE.Vector3(27.3, 0, 8.0),
+      new THREE.Vector3(27.3, 0, 8.0),             // …out through the service corridor door…
+      new THREE.Vector3(30.4, 0, 8.4),             // …to the window at the end, for her smoke break
     ];
     s.pos.set(x, F2, 10.3);
     s.prev.copy(s.pos);
     s.yaw = s.prevYaw = 0;         // facing north, toward the door
     s.active = true;
     s.moving = true;
+    s.fade = 0;                    // steps in from the office rather than popping up
     s.group.visible = true;
     s.say = 'Morning! Go ahead, I got the door.'; s.sayT = 3;
   }
@@ -380,8 +383,10 @@ export class Stealth {
     const s = this.smoker;
     if (!s.active) return;
     s.prev.copy(s.pos); s.prevYaw = s.yaw;
+    s.fade = Math.min(1, (s.fade ?? 1) + dt * 3);
     const t = s.script[0];
-    if (!t) { s.active = false; s.group.visible = false; return; }
+    // At the window: she stays there, facing out, for the rest of her break.
+    if (!t) { s.moving = false; s.yaw += angleDiff(-Math.PI / 2, s.yaw) * Math.min(1, dt * 4); return; }
     const d = tmpV.subVectors(t, s.pos);
     const flat = Math.hypot(d.x, d.z);
     const step = 1.35 * dt;
@@ -781,7 +786,7 @@ export class Stealth {
       const playing = live && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
       if (cw.attendee) { cw.group.position.copy(cw.pos); cw.group.rotation.y = cw.yaw; }
       if ((cw.scripted || cw.isRider) && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; cw.group.visible = false; continue; }
-      if (cw.commuter) cw.char.setFade?.(cw.fade);
+      if (cw.commuter || cw === this.smoker) cw.char.setFade?.(cw.fade ?? 1);
       const floor = cw.group.position.y > 2 ? 1 : 0;
       const same = floor === playerFloor;
       const d = Math.hypot(playerPos.x - cw.group.position.x, playerPos.z - cw.group.position.z);

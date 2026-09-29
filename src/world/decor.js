@@ -73,13 +73,23 @@ function materials(b) {
 }
 
 // Recessed light panels in both ceilings.
-function lights({ box, M }) {
-  const holes = [[20, 0, 23, 8], [10, 0, 14, 4], [23, 0, 26, 9]];   // stair opening, shaft (ground ceiling)
+// A panel never cuts into a wall (where one crossed a wall its edge shared the wall's face and
+// flickered): it moves along the ceiling to a clear spot nearby, or is left out.
+function lights({ box, M, b }) {
+  const holes = [[20, 0, 26, 9], [10, 0, 14, 4]];   // stairwell, shaft (ground ceiling)
   const inHole = (x, z, list) => list.some(([x1, z1, x2, z2]) => x > x1 - 0.8 && x < x2 + 0.8 && z > z1 - 0.5 && z < z2 + 0.5);
+  const R = b.R, shape = new R.Cuboid(0.66, 0.1, 0.36), rot = { x: 0, y: 0, z: 0, w: 1 };
+  const clear = (x, y, z) => !b.world.intersectionWithShape({ x, y: y - 0.2, z }, rot, shape);
+  const place = (x, y, z) => {
+    for (const [dx, dz] of [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8], [1.2, 0], [-1.2, 0]]) {
+      if (clear(x + dx, y, z + dz)) { box(1.2, 0.03, 0.6, M.panel, x + dx, y, z + dz, 0, { cast: false }); return; }
+    }
+  };
+  b.world.step();                                  // (the walls need to be in the broad phase)
   for (let x = 2.5; x < 32; x += 4) {
     for (let z = 2.5; z < 24; z += 4) {
-      if (!inHole(x, z, holes)) box(1.2, 0.03, 0.6, M.panel, x, 3.67, z, 0, { cast: false });
-      if (!inHole(x, z, [[10, 0, 14, 4]])) box(1.2, 0.03, 0.6, M.panel, x, 6.97, z, 0, { cast: false });
+      if (!inHole(x, z, holes)) place(x, 3.67, z);
+      if (!inHole(x, z, [[10, 0, 14, 4]])) place(x, 6.97, z);
     }
   }
 }
@@ -175,13 +185,13 @@ export function workstation(b, M, x, y, z, rot, screen, { keyboard = true } = {}
 export function laptop(b, M, x, y, z, rot, screen) {
   const p = piece(b, x, y, z, rot);
   p.rbox(0.34, 0.018, 0.24, 0.008, M.metal, 0, 0, 0);
-  p.box(0.3, 0.002, 0.13, M.black, 0, 0.018, -0.02);                 // keyboard
+  p.box(0.3, 0.004, 0.13, M.black, 0, 0.018, -0.02);                 // keyboard (proud of the deck)
   // The lid hinges at the back edge and leans back about 15 degrees.
   const back = new THREE.Vector3(0, 0.018, -0.12).applyAxisAngle(up, rot).add(V(x, y, z));
   const g = new RoundedBoxGeometry(0.34, 0.23, 0.012, 2, 0.006);
   const sc = new THREE.PlaneGeometry(0.31, 0.19);
   const tilt = new THREE.Matrix4().makeRotationX(-0.26);
-  for (const [geo, mat, dz] of [[g, M.metal, 0], [sc, screen, 0.0075]]) {
+  for (const [geo, mat, dz] of [[g, M.metal, 0], [sc, screen, 0.0095]]) {
     geo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.115, dz)).applyMatrix4(tilt)
       .applyMatrix4(new THREE.Matrix4().makeRotationY(rot)).applyMatrix4(new THREE.Matrix4().makeTranslation(back.x, back.y, back.z));
     b.addGeo(geo, mat, { cast: mat !== screen });
@@ -390,7 +400,7 @@ function furnish(b, M) {
     const t = P(30.1, F2, 20.9, 0);
     t.rbox(1.4, 0.05, 0.7, 0.02, M.oak, 0, 0.38, 0);
     for (const [dx, dz] of [[-0.6, -0.28], [0.6, -0.28], [-0.6, 0.28], [0.6, 0.28]]) t.box(0.04, 0.38, 0.04, M.darkMetal, dx, 0, dz);
-    t.box(3.0, 0.006, 2.2, M.rug, 0, 0.004, 0.3);
+    t.box(3.0, 0.006, 2.2, M.rug, 0, 0.014, 0.3);                 // clear of the floor colour
     t.cyl(0.05, 0.04, 0.1, M.white, 0.3, 0.43, 0.1, 12);
   }
   plant(b, M, 31.4, F2, 17.2, 1.4, 0.3, true);
@@ -434,7 +444,7 @@ function shelving(b, M, x, y, z, rot, w, h, d, seed) {
   let r = seed;
   for (let j = 0; j < levels; j++) {
     const yy = 0.08 + j * (h - 0.1) / (levels - 0.5);
-    p.box(w, 0.03, d, M.metal, 0, yy, 0);
+    p.box(w - 0.012, 0.03, d - 0.012, M.metal, 0, yy, 0);   // inside the uprights, not flush
     for (let x0 = -w / 2 + 0.1; x0 < w / 2 - 0.4; ) {
       r = (r * 13 + 7) % 17;
       const bw = 0.3 + (r % 5) * 0.08;

@@ -155,7 +155,9 @@ export class Builder {
     const t = WALL_T / 2;
     this._segments(x1, x2, gaps).forEach(([a, b]) => {
       this.box(a, y0, z - t, b, y0 + h, z + t, { xray: true, ...opts });
-      this.box(a, y0, z - t - 0.015, b, y0 + 0.1, z + t + 0.015, { color: 0x4a4f57, collide: false, xray: true, cast: false });   // skirting
+      // Skirting wraps round the wall's ends too (its end faces used to sit in the same plane as
+      // the wall's and flickered at the foot of every doorway).
+      this.box(a - 0.015, y0, z - t - 0.015, b + 0.015, y0 + 0.1, z + t + 0.015, { color: 0x4a4f57, collide: false, xray: true, cast: false });   // skirting
     });
     gaps.forEach(([a, b]) => {
       if (h > DOOR_H) this.box(a, y0 + DOOR_H, z - t, b, y0 + h, z + t, { xray: true, ...opts });
@@ -167,7 +169,7 @@ export class Builder {
     const t = WALL_T / 2;
     this._segments(z1, z2, gaps).forEach(([a, b]) => {
       this.box(x - t, y0, a, x + t, y0 + h, b, { xray: true, ...opts });
-      this.box(x - t - 0.015, y0, a, x + t + 0.015, y0 + 0.1, b, { color: 0x4a4f57, collide: false, xray: true, cast: false });   // skirting
+      this.box(x - t - 0.015, y0, a - 0.015, x + t + 0.015, y0 + 0.1, b + 0.015, { color: 0x4a4f57, collide: false, xray: true, cast: false });   // skirting
     });
     gaps.forEach(([a, b]) => {
       if (h > DOOR_H) this.box(x - t, y0 + DOOR_H, a, x + t, y0 + h, b, { xray: true, ...opts });
@@ -230,7 +232,8 @@ export class Builder {
     const w = 4.6 * size, hgt = w * (c.height / c.width);
     const m = new THREE.Mesh(
       new THREE.PlaneGeometry(w, hgt),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+      // Pulled toward the camera so it always wins over the floor colour it's printed on.
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
     );
     m.rotation.x = -Math.PI / 2;
     m.rotation.z = rot;

@@ -164,7 +164,7 @@ export function buildLevel(b, state) {
   const stepsA = 9, runA = 7 - 2.2;
   for (let i = 0; i < stepsA; i++) {
     const zs = 7 - (i + 1) * (runA / stepsA);
-    b.box(23.05, 0, zs, 25.95, (i + 0.7) * (LAND / stepsA), zs + runA / stepsA, { color: C.stairs, collide: false });
+    b.box(23.1, 0, zs, 25.95, (i + 0.7) * (LAND / stepsA), zs + runA / stepsA, { color: C.stairs, collide: false });
   }
   // Half landing across the north end.
   b.box(20.05, 0, 0.12, 25.95, LAND, 2.2, { color: C.stairs });
@@ -173,7 +173,7 @@ export function buildLevel(b, state) {
   const stepsB = 11, runB = 8 - 2.2;
   for (let i = 0; i < stepsB; i++) {
     const zs = 2.2 + i * (runB / stepsB);
-    b.box(20.05, 0, zs, 22.95, LAND + (i + 0.7) * ((F2 - LAND) / stepsB), zs + runB / stepsB, { color: C.stairs, collide: false });
+    b.box(20.05, 0, zs, 22.9, LAND + (i + 0.7) * ((F2 - LAND) / stepsB), zs + runB / stepsB, { color: C.stairs, collide: false });   // (up to the spine wall, not into it)
   }
 
   // ---------- Ground floor interior ----------
