@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PALETTE as C } from './builder.js';
 import { Door } from './doors.js';
 import { Elevator } from './elevator.js';
+import { decorate } from './decor.js';
 
 /*
   Level 1 — "Badge? What Badge?"  Footprint 32 m (x) × 24 m (z). North is -z.
@@ -71,11 +72,46 @@ export function buildLevel(b, state) {
   b.label('Elevator', 12, F2, 6.6, { size: 0.62 });
   b.label('Printer', 10.8, F2, 22.3, { size: 0.42 });
 
-  // ---------- Exterior walls (both floors, one piece) ----------
-  b.hwall(0, 0, 32, 0, 7);
-  b.hwall(24, 0, 32, 0, 7, [[13, 17]]);
-  b.vwall(0, 0, 24, 0, 7);
-  b.vwall(32, 0, 24, 0, 7);
+  // ---------- Exterior walls: window bands on both floors ----------
+  // Each floor: a sill, a band of glass with mullions, and a header up to the next slab. The
+  // glass blocks you and the camera (it's the outside wall), unlike the glass inside.
+  const winGlass = b.surface('glass', 0xa9c7dc, { opacity: 0.22 });
+  const frame = b.surface('metal', 0x3d434b);
+  const exterior = (axis, fixed, from, to, skip = []) => {
+    const t = 0.1;
+    const box = (a1, y1, a2, y2, opts) => (axis === 'x'
+      ? b.box(a1, y1, fixed - t, a2, y2, fixed + t, opts)
+      : b.box(fixed - t, y1, a1, fixed + t, y2, a2, opts));
+    for (const [y0, top] of [[0, 4.0], [F2, 7.2]]) {
+      box(from, y0, to, y0 + 0.85, {});                                   // sill wall
+      box(from, y0 + 2.75, to, top, { cast: false });                    // header
+      const gaps = skip.filter((g) => g.y0 === y0);
+      let a = from;
+      for (const g of [...gaps, { a: to, b: to }]) {
+        if (g.a > a) {
+          box(a, y0 + 0.85, g.a, y0 + 2.75, { material: winGlass, see: false, cast: false });
+          for (let m = a; m <= g.a + 1e-3; m += (g.a - a) / Math.max(1, Math.round((g.a - a) / 1.6))) {
+            box(m - 0.04, y0 + 0.85, m + 0.04, y0 + 2.75, { material: frame, collide: false });   // mullion
+          }
+          box(a, y0 + 0.85, g.a, y0 + 0.9, { material: frame, collide: false });
+          box(a, y0 + 2.7, g.a, y0 + 2.75, { material: frame, collide: false });
+        }
+        if (g.solid) box(g.a, y0 + 0.85, g.b, y0 + 2.75, {});
+        a = g.b;
+      }
+    }
+  };
+  exterior('x', 0, 0, 32);
+  exterior('x', 24, 0, 32, [{ y0: 0, a: 13, b: 17 }]);
+  exterior('z', 0, 0, 24);
+  exterior('z', 32, 0, 24);
+  // Front entrance: glass doors (closed: you're already in) under a frame.
+  b.box(13, 0, 23.93, 17, 2.75, 24.07, { material: winGlass, see: false, cast: false });
+  [13, 15, 17].forEach((x) => b.box(x - 0.05, 0, 23.9, x + 0.05, 2.75, 24.1, { material: frame, collide: false }));
+  b.box(13, 2.7, 23.9, 17, 2.8, 24.1, { material: frame, collide: false });
+  [14.8, 15.2].forEach((x) => b.box(x - 0.015, 0.9, 23.85, x + 0.015, 1.6, 23.9, { material: frame, collide: false }));   // handles
+  // Floor 2 ceiling (the ground floor's ceiling is the underside of the Floor 2 slab).
+  b.box(0, 7.0, 0, 32, 7.2, 24, { color: 0xe9ecef, collide: false, cast: false });
 
   // ---------- Elevator shaft (full height) + car ----------
   b.vwall(10, 0, 4, 0, 7);
@@ -133,21 +169,23 @@ export function buildLevel(b, state) {
     }));
   });
   // Reception
-  b.box(1, 0, 14.4, 6, 1.1, 15.2, { color: C.counter });
+  b.box(1, 0, 14.4, 6, 1.1, 15.2, { visible: false });
   // Café
-  b.box(18, 0, 19.6, 24, 1.1, 20.4, { color: C.counter });
-  b.box(22.4, 1.1, 19.75, 23.5, 1.65, 20.25, { color: 0x3b3f45 });
+  b.box(18, 0, 19.6, 24, 1.1, 20.4, { visible: false });
+  b.box(22.4, 1.1, 19.75, 23.5, 1.65, 20.25, { visible: false });
   // Lobby furniture
-  b.box(7.6, 0, 20.4, 8.4, 1.5, 21.2, { color: 0x6f9e6a });
-  b.box(8.8, 0, 21.8, 9.6, 1.3, 22.6, { color: 0x6f9e6a });
-  b.box(2.6, 0, 21.6, 5.8, 0.5, 22.4, { color: C.desk });
-  b.box(3.2, 0, 3.2, 4, 1.4, 4, { color: 0x6f9e6a });
+  // (Visible furniture for all of these is in decor.js; these are the colliders.)
+  b.box(7.6, 0, 20.4, 8.4, 1.5, 21.2, { visible: false });
+  b.box(8.8, 0, 21.8, 9.6, 1.3, 22.6, { visible: false });
+  b.box(2.6, 0, 21.6, 5.8, 0.5, 22.4, { visible: false });
+  b.box(3.2, 0, 3.2, 4, 1.4, 4, { visible: false });
+  b.box(3.65, 0, 20.52, 4.75, 0.44, 21.08, { visible: false });             // coffee table
   // Mailroom + service corridor
-  b.box(31, 0, 15, 31.8, 2.2, 23.2, { color: C.desk });
-  b.box(26.3, 0, 22.3, 27.1, 0.9, 23.3, { color: C.rail });                 // cart propping the door
+  b.box(31, 0, 15, 31.8, 2.2, 23.2, { visible: false });
+  b.box(26.3, 0, 22.3, 27.1, 0.9, 23.3, { visible: false });                 // cart propping the door
   b.box(26.1, 0, 22.2, 27.7, 2.3, 22.3, { color: 0x8a95a3, collide: false }); // the propped door
-  b.box(30.4, 0, 1, 31.8, 1.6, 6, { color: C.desk });
-  b.box(27, 0, 11.6, 28.4, 1, 12.8, { color: C.rail });
+  b.box(30.4, 0, 1, 31.8, 1.6, 6, { visible: false });
+  b.box(27, 0, 11.6, 28.4, 1, 12.8, { visible: false });
 
   // ---------- Floor 2 interior ----------
   const H = 3;
@@ -165,33 +203,30 @@ export function buildLevel(b, state) {
   // Cubicle pods: rows between the arrivals (north) and Meeting 2B (south-west).
   const pods = [[1.5, 11], [7, 11], [12.5, 11], [18, 11], [12.5, 15], [18, 15], [12.5, 19.5], [18, 19.5]];
   pods.forEach(([x, z]) => {
-    b.box(x, F2, z, x + 4.3, F2 + 1.25, z + 2.2, { color: C.partition });
-    b.box(x + 0.2, F2 + 1.25, z + 0.2, x + 4.1, F2 + 1.28, z + 2.0, { color: C.desk, collide: false });
+    b.box(x, F2, z, x + 4.3, F2 + 1.25, z + 2.2, { visible: false });    // desks + partitions: decor.js
   });
   // Kitchen
-  b.box(31.2, F2, 9.6, 32, F2 + 0.95, 16.2, { color: C.counter });
-  b.box(31.25, F2 + 0.95, 12.2, 31.9, F2 + 1.55, 13.2, { color: 0x3b3f45 });   // espresso machine
-  b.box(27.8, F2, 10.4, 29.2, F2 + 0.95, 12.8, { color: C.counter });          // island
-  b.box(26.3, F2, 14.8, 27.3, F2 + 2, 16.2, { color: 0xe9edf1 });              // fridge
+  b.box(31.2, F2, 9.6, 32, F2 + 0.95, 16.2, { visible: false });
+  b.box(31.25, F2 + 0.95, 12.2, 31.9, F2 + 1.55, 13.2, { visible: false });   // espresso machine
+  b.box(27.8, F2, 10.4, 29.2, F2 + 0.95, 12.8, { visible: false });          // island
+  b.box(26.3, F2, 14.8, 27.3, F2 + 2, 16.2, { visible: false });             // fridge
   // Meeting 2B furniture
-  b.box(2, F2, 18.6, 6.5, F2 + 0.75, 21.6, { color: C.counter });
-  b.box(0.1, F2 + 1, 18.5, 0.25, F2 + 2.2, 22, { color: 0x2b2f35, collide: false });
+  b.box(2, F2, 18.6, 6.5, F2 + 0.75, 21.6, { visible: false });
   // Chairs round the table (Sam sits on the south side, facing the door and the screen).
   const chair = (x, z, back) => {
-    b.box(x - 0.25, F2, z - 0.25, x + 0.25, F2 + 0.46, z + 0.25, { color: 0x3d4450 });
-    const [bx1, bz1, bx2, bz2] = back === 'n' ? [x - 0.25, z - 0.3, x + 0.25, z - 0.22] : [x - 0.25, z + 0.22, x + 0.25, z + 0.3];
-    b.box(bx1, F2 + 0.46, bz1, bx2, F2 + 1.0, bz2, { color: 0x3d4450, collide: false });
+    b.box(x - 0.25, F2, z - 0.25, x + 0.25, F2 + 0.46, z + 0.25, { visible: false });
   };
   chair(4.6, 17.95, 'n');
   chair(3.0, 17.95, 'n');
   chair(3.0, 22.25, 's');
   chair(4.6, 22.25, 's');
   // Lounge, phone pods, printer, closet shelves
-  b.box(28.5, F2, 21.8, 31.6, F2 + 0.7, 23.2, { color: 0x6f7f95 });
+  b.box(28.5, F2, 21.8, 31.6, F2 + 0.7, 23.2, { visible: false });
+  b.box(29.4, F2, 20.55, 30.8, F2 + 0.43, 21.25, { visible: false });        // coffee table
   b.box(23.4, F2, 17.5, 25.4, F2 + 2.3, 19.7, { color: C.glass, opacity: 0.5, xray: false });
   b.box(23.4, F2, 20.6, 25.4, F2 + 2.3, 22.8, { color: C.glass, opacity: 0.5, xray: false });
-  b.box(10.1, F2, 23, 11.5, F2 + 1.1, 23.8, { color: 0xd8dce2 });
-  b.box(26.4, F2, 0.4, 31.6, F2 + 2, 1.2, { color: C.desk });
+  b.box(10.1, F2, 23, 11.5, F2 + 1.1, 23.8, { visible: false });
+  b.box(26.4, F2, 0.4, 31.6, F2 + 2, 1.2, { visible: false });
 
   // ---------- Doors ----------
   // Stair exit: badge only from the stairwell side. Someone steps out every 25 s.
@@ -206,6 +241,8 @@ export function buildLevel(b, state) {
     shouldOpen: (p) => (onF2(p) && Math.hypot(p.x - 9, p.z - 21) < 2) || state.npcDoor,
   });
   doors.push(meetingDoor);
+
+  decorate(b);
 
   return {
     doors,

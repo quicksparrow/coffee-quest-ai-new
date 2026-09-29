@@ -399,7 +399,10 @@ export class Game {
     if (this.player.idleStyle === 'arms' && (s.smokerOpen || !this.level.zones.stairDoorInside(p))) this.player.idleStyle = null;
     const pp = this.player.position;
     this._doorProbe.set(pp.x, pp.y + 0.85, pp.z);
-    for (const d of this.level.doors) d.update(dt, this._doorProbe);
+    for (const d of this.level.doors) {
+      d.update(dt, this._doorProbe);
+      if (d.justOpened && Math.abs(d.base.y - pp.y - 1.2) < 2) this.sfx.door(1 - Math.hypot(d.base.x - pp.x, d.base.z - pp.z) / 12);
+    }
 
     // Situational hints
     const Z = this.level.zones;

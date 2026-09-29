@@ -53,6 +53,15 @@ Seven chatty coworkers walk their routes: Pat (Accounting) and Tom (Sales) in th
 - Rita steps out through the Floor 2 stair door for a smoke and holds it open for you.
 - Hold X to see everyone through the walls, with their sight cones and routes, plus every place you can do something on your floor.
 
+## Look and sound
+
+Everything you see and hear is generated in code when the game loads, so there is nothing extra to download and it works on any host:
+
+- Surfaces are painted on canvases (`src/world/textures.js`): carpet tiles, polished stone, wood planks and grain, concrete, painted plaster, partition fabric, ceiling tiles, brushed metal, plus the monitor screens, the café menu, the company sign, wall art and the city skyline outside. Textures are mapped in world space, so a carpet tile or a plank is the same real size everywhere.
+- The building has window bands on both floors with a skyline beyond them, ceilings with light panels, skirting boards, and a glass entrance. Reflections and soft fill light come from three.js's built-in room environment.
+- Furniture (`src/world/decor.js`): cubicle pods with desks, monitors, keyboards and office chairs, the reception desk, the café counter with pastry case and espresso machine, the kitchen, the meeting room, the lounge, phone pods, printer, mailroom pigeonholes, shelving, plants and art. It's all merged into a few meshes per material and none of it changes the collision or the coworkers' routes (the old graybox blocks are now invisible colliders).
+- Sound is synthesized with the Web Audio API (`src/core/audio.js`): air-conditioning rumble, distant chatter, keyboards upstairs, footsteps that click on stone and thud on carpet, doors, the elevator hum, plus the old beeps and dings. M in the pause menu mutes it.
+
 ## Deploy (Vercel or Netlify)
 
 Push this folder to a GitHub repository, then import it in Vercel or Netlify. Both detect Vite automatically:
@@ -77,7 +86,7 @@ src/ui/                 HUD updates, name tags, speech bubbles and meters
 ## Performance notes
 
 - Physics runs at a fixed 60 steps per second and the player is drawn between steps, so movement is equally smooth on 60, 120 and 144 Hz screens.
-- Static geometry is merged into one mesh per material, which cut the lobby from about 240 draw calls per frame to about 75 (shadows included).
+- Static geometry (walls, floors and all the furniture) is merged into one mesh per material, so the whole furnished office draws in about 130 draw calls per frame, shadows and characters included.
 - Shaders are compiled and textures uploaded before "Press Enter" appears, so there is no hitch when play starts or when X-ray is first used.
 - Render resolution adapts: if the frame rate drops below about 45 fps the game lowers its render scale, and it never climbs back to a scale that was too slow.
 - The HUD only touches the page when a value changes. Menus redraw the 3D scene only when needed, and the game pauses when the tab or window loses focus.
@@ -92,4 +101,4 @@ Claire, Steven, the lobby staff and the coworkers use Quaternius's **Universal B
 
 ## Status
 
-Stage 3 of the plan: coworkers with patrols, sight cones, conversations and hiding spots, on the graybox level. Next: objectives and scoring (tailgating through badge doors, the kitchen back door into 2B, the manager's walk to the call).
+Stage 4 of the plan: a furnished, lit office with sound, coworkers with patrols, sight cones, conversations and hiding spots. Next: more routes (tailgating through badge doors, the kitchen back door into 2B), then polish and launch.

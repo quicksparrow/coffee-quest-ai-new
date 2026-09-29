@@ -8,6 +8,9 @@ import { Player } from './actors/player.js';
 import { loadCharacterAssets, Character, KINDS, NAMES, PLAYER_LOOKS, look as lookOf } from './actors/character.js';
 import { FollowCamera } from './systems/camera.js';
 import { Hud } from './ui/hud.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { allTextures } from './world/textures.js';
+import { backdrop } from './world/decor.js';
 import { nameTag } from './ui/sprites.js';
 import { Stealth, RAY_GROUPS } from './systems/stealth.js';
 import { Beacons } from './systems/beacons.js';
@@ -50,7 +53,7 @@ async function boot() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.0;
 
   // Adaptive resolution: start sharp, drop the render scale if the frame rate sags,
   // and never climb back to a scale that already proved too slow on this machine.
@@ -67,7 +70,14 @@ async function boot() {
   // A 0.1 m near plane keeps depth precision high enough that floors and decals never flicker.
   const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 90);
 
-  scene.add(new THREE.HemisphereLight(0xf4f7fb, 0x9aa0a8, 1.7));
+  // Soft image-based light from a generic room (built in code, nothing to download): gives
+  // the stone floor, glass and metal their reflections and fills the shadows.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.55;
+  pmrem.dispose();
+  scene.add(new THREE.HemisphereLight(0xf6f4ef, 0x8f8a82, 0.85));
+  backdrop(scene);
   // "Sun through the windows": one shadow light that follows the player and sits just under
   // the ceiling of their floor, so the floor above never shades the one below.
   const sun = new THREE.DirectionalLight(0xfff4e6, 1.9);
@@ -177,7 +187,7 @@ async function boot() {
   let skipDelta = false;
   let dirty = true;   // outside of play we only redraw when something changed
   const showScreen = (id) => ['start', 'pause', 'end'].forEach((s) => { $(s).hidden = s !== id; });
-  const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; } };
+  const pause = () => { if (mode === 'playing') { mode = 'paused'; showScreen('pause'); dirty = true; sfx.stopAmbience(); } };
 
   const game = new Game({
     level, player, camCtl, input, hud, sfx, builder, marker, stealth, beacons,
@@ -241,6 +251,7 @@ async function boot() {
 
   const startGame = () => {
     sfx.unlock();
+    sfx.startAmbience();
     camera.clearViewOffset();
     if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
@@ -254,6 +265,7 @@ async function boot() {
   };
   const resume = () => {
     if (mode !== 'paused') return;
+    sfx.startAmbience();
     input.endFrame();
     acc = 0;
     skipDelta = true;                 // don't count the paused time as one giant frame
@@ -298,7 +310,7 @@ async function boot() {
   // Coworker labels, sight cones and X-ray beacons are normally hidden: show them for the compile.
   stealth?.warmup(true);
   beacons.warmup(true);
-  builder.textures.forEach((t) => renderer.initTexture(t));
+  [...builder.textures, ...allTextures()].forEach((t) => renderer.initTexture(t));
   const tBuilt = performance.now();
   await renderer.compileAsync(scene, camera);
   const tCompiled = performance.now();
@@ -339,7 +351,7 @@ async function boot() {
       animateCharacters(dt);
       camCtl.update(dt, player);
       placeSun(player.floor, player.renderPos.x, player.renderPos.z);
-      if (mode === 'playing') game.updateHud(dt);
+      if (mode === 'playing') { game.updateHud(dt); sounds(dt); }
       renderer.render(scene, camera);
       adaptQuality(raw);
     } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
@@ -389,6 +401,25 @@ async function boot() {
     const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.max(Math.atan(needH / camera.aspect), Math.atan(needV))), 50, 110);
     if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
     player.setFade(1);
+  }
+
+  // Footsteps (one per stride, by floor surface) and the office ambience.
+  const lastStep = new THREE.Vector3();
+  let stride = 0;
+  function sounds(dt) {
+    const p = player.renderPos;
+    const riding = level.elevator.moving && level.zones.inCab(p);
+    sfx.updateAmbience(dt, { floor: player.floor, riding });
+    const moved = Math.hypot(p.x - lastStep.x, p.z - lastStep.z);
+    lastStep.copy(p);
+    if (riding || player.hidden || moved > 1 || !player.moving) { if (!player.moving) stride = 0.5; return; }
+    stride += moved;
+    const len = player.hurrying ? 1.05 : player.crouching ? 0.55 : 0.8;
+    if (stride >= len) {
+      stride -= len;
+      const carpet = player.floor === 1 && p.x < 26 && !level.zones.stairwell(p);
+      sfx.step(carpet ? 'carpet' : 'hard', player.crouching ? 0.45 : player.hurrying ? 1.3 : 1);
+    }
   }
 
   function animateCharacters(dt) {
@@ -449,7 +480,7 @@ async function boot() {
   if (DEBUG) {
     // Handle for automated playtests and performance checks (?debug in the URL).
     window.__coffeeQuest = {
-      game, player, state, level, renderer, scene, quality, stealth, camera, input, world,
+      game, player, state, level, renderer, scene, quality, stealth, camera, input, world, sfx,
       // Run the simulation n fixed steps at once (automated playtests).
       step(n) {
         for (let i = 0; i < n && mode === 'playing'; i++) { game.update(STEP); world.step(); player.capture(); input.endFrame(); }
