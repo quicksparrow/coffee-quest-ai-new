@@ -99,7 +99,7 @@ const COMMUTERS = [
 ];
 // Plaza → front door → gate → along the turnstiles → stairwell → up both flights → stair door.
 const COMMUTER_ROUTE = [
-  [17.6, 0, 29.2], [15.6, 0, 25.2], [15.1, 0, 23.2], [13, 0, 12.6], [13, 0, 10.2], [23.6, 0, 10.2], [24.5, 0, 9.2],
+  [17.6, 0, 29.2], [15.6, 0, 25.2], [15.6, 0, 23.2], [16.2, 0, 21.4], [13, 0, 12.6],   // (round you, at the spawn) [13, 0, 10.2], [23.6, 0, 10.2], [24.5, 0, 9.2],
   [24.5, 0, 7.1], [24.5, 1.9, 2.2], [24.5, 1.9, 1.1], [21.5, 1.9, 1.1], [21.5, 1.9, 2.2], [21.5, F2, 8.0], [21.5, F2, 8.7], [21.5, F2, 10.2],
 ];
 const COMMUTER_GATE = 13;          // centre x of the turnstile gate they use
