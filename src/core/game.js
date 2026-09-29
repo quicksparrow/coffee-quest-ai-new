@@ -529,9 +529,9 @@ export class Game {
     if (late > 0) this.sfx.deny(); else this.sfx.win();
     // The people in 2B react (see Stealth.react); the score card follows a few seconds later.
     const sips = this.events.find((e) => e.label === 'Sips')?.n || 0;
-    const quote = this.stealth?.react({ late: late > 0, lateBy: late, cups, lastTalker: this.lastTalker, chats: this.conversations, sips }) || null;
+    const scene = this.stealth?.react({ late: late > 0, lateBy: late, cups, lastTalker: this.lastTalker, chats: this.conversations, sips });
     this.onEnd({
-      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1], quote,
+      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1], quote: scene?.quote, lines: scene?.lines || [],
     });
   }
 }

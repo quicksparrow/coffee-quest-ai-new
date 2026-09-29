@@ -177,3 +177,13 @@ canvas#game:focus { outline: none; }
 .controls .keys { margin-top: 10px; }
 @media (max-width: 720px) { .screen.start { place-items: center; padding-left: 20px; background: rgba(13,17,22,.9); } }
 .char-error { margin: 2px 0 0 10px; color: var(--espresso); }
+
+/* ---------- Meeting 2B finale captions ---------- */
+#captions { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%); width: min(760px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.cap { background: rgba(20,26,35,.86); border: 1px solid var(--glass-line); border-radius: 12px; padding: 8px 14px; font-size: 17px; line-height: 1.35; animation: capin .35s ease-out; }
+.cap b { color: var(--espresso); font-weight: 600; margin-right: 6px; }
+.cap .role { font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+.cap.old { opacity: .72; }
+@keyframes capin { from { transform: translateY(8px); opacity: 0; } }
+.transcript { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; color: #c3cad3; margin: -4px 0 2px; }
+.transcript b { color: var(--espresso); font-weight: 600; margin-right: 6px; }

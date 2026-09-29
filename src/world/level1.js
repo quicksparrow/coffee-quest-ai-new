@@ -176,7 +176,7 @@ export function buildLevel(b, state) {
   // Meeting 2B furniture
   b.box(2, F2, 18.6, 6.5, F2 + 0.75, 21.6, { color: C.counter });
   b.box(0.1, F2 + 1, 18.5, 0.25, F2 + 2.2, 22, { color: 0x2b2f35, collide: false });
-  // Chairs round the table (Sam sits in the one on the north side).
+  // Chairs round the table (Sam sits on the south side, facing the door and the screen).
   const chair = (x, z, back) => {
     b.box(x - 0.25, F2, z - 0.25, x + 0.25, F2 + 0.46, z + 0.25, { color: 0x3d4450 });
     const [bx1, bz1, bx2, bz2] = back === 'n' ? [x - 0.25, z - 0.3, x + 0.25, z - 0.22] : [x - 0.25, z + 0.22, x + 0.25, z + 0.3];

@@ -161,6 +161,21 @@ async function boot() {
     console.error('Coworkers failed to start', err);
   }
   const beacons = new Beacons(scene, level, state);
+  // Finale captions: each line the room says appears at the bottom, newest last.
+  if (stealth) {
+    stealth.onLine = (name, role, text) => {
+      const box = $('captions');
+      [...box.children].forEach((c) => c.classList.add('old'));
+      const d = document.createElement('div');
+      d.className = 'cap';
+      d.innerHTML = '<b></b><span class="role"></span><span></span>';
+      d.children[0].textContent = name;
+      d.children[1].textContent = role;
+      d.children[2].textContent = text;
+      box.appendChild(d);
+      while (box.children.length > 3) box.firstChild.remove();
+    };
+  }
 
   const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xd6a27c }));
   marker.renderOrder = 10;
@@ -190,7 +205,18 @@ async function boot() {
       hud.show(false);                 // the room reacts first, full screen
       $('end-eyebrow').textContent = `Arrived ${r.arrived}`;
       $('end-title').textContent = r.late ? 'Late, but you made it' : 'Right on time';
-      $('end-line').textContent = r.quote || (r.late ? '"Oh good. You could join us."' : 'Right on time. Nobody suspects the coffee run.');
+      $('end-line').textContent = r.late ? 'Everyone saw you walk in.' : 'Nobody suspects the coffee run.';
+      // Everything the room said, in order, so no line is missed.
+      $('end-transcript').innerHTML = '';
+      (r.lines || []).forEach((l) => {
+        const d = document.createElement('div');
+        d.innerHTML = '<b></b><span></span>';
+        d.firstChild.textContent = l.name;
+        d.lastChild.textContent = l.text;
+        $('end-transcript').appendChild(d);
+      });
+      $('captions').innerHTML = '';
+      $('captions').hidden = false;
       $('end-rating').textContent = `${r.cups} cup${r.cups > 1 ? 's' : ''} · ${r.rating}`;
       const cup = (full) => `<svg class="cup${full ? ' full' : ''}" viewBox="0 0 40 40"><path class="body" d="M8 12 H28 L26 34 H10 Z"/><path class="handle" d="M28 16 C36 16 36 26 27 26"/></svg>`;
       $('end-cups').innerHTML = [1, 2, 3, 4, 5].map((i) => cup(i <= r.cups)).join('');
@@ -205,7 +231,7 @@ async function boot() {
       $('end-score').textContent = r.total.toLocaleString('en-US');
       // Let the room react first (a few seconds of speech bubbles), then the score card.
       // (endCam shows the card once the reactions have played; this is only a fallback.)
-      setTimeout(() => { if (mode === 'end') showScreen('end'); }, 12000);
+      setTimeout(() => { if (mode === 'end') showEndCard(); }, 15000);
     },
   });
 
@@ -242,6 +268,8 @@ async function boot() {
   const startGame = () => {
     sfx.unlock();
     camera.clearViewOffset();
+    $('captions').hidden = true;
+    if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
     if (mode === 'start') player.teleport(level.spawn, level.spawnYaw);
     camCtl.snap();
     if (mode === 'end' || mode === 'paused') { game.reset(); resetNpcs(); }
@@ -354,20 +382,39 @@ async function boot() {
   }
 
   // Walking into 2B: the camera moves into the room's far corner so you see everyone react.
-  const END_POS = new THREE.Vector3(0.6, F2 + 2.2, 23.6);
-  const END_LOOK = new THREE.Vector3(5.2, F2 + 1.0, 19.6);
+  const END_POS = new THREE.Vector3(0.35, F2 + 2.6, 16.75);   // north-west corner of 2B, up high
   let endBlend = 0;
+  const endLook = new THREE.Vector3();
+  const tmpV = new THREE.Vector3();
+  const showEndCard = () => { $('captions').hidden = true; showScreen('end'); };
   function endCam(dt) {
     if (!game.inMeeting) { camCtl.update(dt, player); return; }
     // A beat on the follow camera as you step in, then a cut to the room (a camera move
     // would pass through the wall).
     endBlend += dt;
-    // Score card after the last line has had time to be read (about 6.5 s of reactions).
-    if ($('end').hidden && (stealth?.reaction ? stealth.reaction.t > 6.4 : endBlend > 6.4)) showScreen('end');
+    // Score card after the last line has had time to be read.
+    if ($('end').hidden && (stealth?.reaction ? stealth.reaction.t > stealth.reaction.end : endBlend > 6.4)) showEndCard();
     if (endBlend < 0.35) { camCtl.update(dt, player); return; }
-    const drift = Math.min(1, (endBlend - 0.35) / 4);           // slow push-in while they talk
-    camera.position.copy(END_POS).lerp(END_LOOK, drift * 0.12);
-    camera.lookAt(END_LOOK);
+    // Frame everyone in the room plus you, whatever the window's shape: aim at the middle of
+    // the group and widen the lens until every head (and the space above it) fits.
+    const people = [...(stealth?.roomPeople || []).map((c) => c.pos), player.renderPos];
+    endLook.set(0, 0, 0);
+    people.forEach((p) => endLook.add(p));
+    endLook.multiplyScalar(1 / people.length).setY(F2 + 1.1);
+    camera.position.copy(END_POS);
+    camera.lookAt(endLook);
+    camera.updateMatrixWorld();
+    let needH = 0, needV = 0;
+    for (const p of people) {
+      for (const y of [0.1, 2.35]) {
+        const v = tmpV.set(p.x, F2 + y, p.z).applyMatrix4(camera.matrixWorldInverse);
+        if (v.z > -0.3) continue;
+        needH = Math.max(needH, (Math.abs(v.x) + 0.45) / -v.z);
+        needV = Math.max(needV, (Math.abs(v.y) + 0.1) / -v.z);
+      }
+    }
+    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.max(Math.atan(needH / camera.aspect), Math.atan(needV))), 50, 110);
+    if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
     player.setFade(1);
   }
 

@@ -72,7 +72,7 @@ const CAST = [
     id: 'karen', name: 'Karen', role: 'HR', kind: 'woman', y: F2, look: look('Plum', 'Fair', 'Brown'),
     speed: 1.2, cone: 50, range: 8, sense: 1, hurrySense: 3, talk: 14, chase: 3.8,
     path: [[27.5, 18.4, 3, 'phone'], [27.5, 23, 0], [23.9, 23.3, 2.5, 'arms'], [24.9, 16.5, 0]],
-    meetingSpot: [6.6, 23.0], meetingYaw: Math.PI * 0.75,
+    meetingSpot: [7.8, 23.3], meetingYaw: Math.PI / 4,
     hey: 'Walking, please. It is in the handbook.',
     lines: ['Your compliance training is overdue.', 'It is only nine modules.', 'Also, we do not microwave fish.', 'I will send a calendar invite. Mandatory.'],
   },
@@ -92,7 +92,7 @@ const SMOKER = { id: 'rita', name: 'Rita', role: 'Smoke break', kind: 'woman', l
 // They react when you walk in: nice things if you're on time, passive-aggressive ones if not.
 const ATTENDEES = [
   { id: 'linda', name: 'Linda', role: 'VP', kind: 'woman', look: look('Slate', 'Fair', 'Brown'), at: [1.4, 20.1], yaw: -Math.PI / 2, pose: 'talk' },
-  { id: 'sam', name: 'Sam', role: 'Work buddy', kind: 'man', look: look('Charcoal', 'Brown', 'Black'), at: [4.6, 17.95], yaw: Math.PI, pose: 'sit' },
+  { id: 'sam', name: 'Sam', role: 'Work buddy', kind: 'man', look: look('Charcoal', 'Brown', 'Black'), at: [4.6, 22.25], yaw: 0, pose: 'sit' },
 ];
 // Where Monica goes at 9:00: to the door of 2B, then inside.
 const MEETING_DOOR = new THREE.Vector3(10.4, F2, 21);
@@ -265,29 +265,46 @@ export class Stealth {
   // Who says what when you arrive (about six seconds of it). Returns the quote for the end screen.
   react({ late, lateBy = 0, cups, lastTalker, chats = 0, sips = 0 }) {
     const [linda, sam] = this.attendees;
-    const monica = this.monica.state === 'inMeeting' ? this.monica : null;
-    const karen = this.karen.state === 'inMeeting' ? this.karen : null;
+    const { monica, karen } = this;
+    // Everyone who belongs in the call is in the room by the time the camera cuts in.
+    for (const m of this.joiners) {
+      if (m.state !== 'inMeeting') {
+        m.state = 'inMeeting';
+        m.pos.set(m.def.meetingSpot[0], F2, m.def.meetingSpot[1]);
+        m.route = [];
+      }
+      m.prev.copy(m.pos);
+      m.moving = false;
+      m.yaw = m.prevYaw = m.def.meetingYaw;
+      m.group.position.copy(m.pos);
+      m.group.rotation.y = m.yaw;
+      this.placeBody(m);
+    }
+    this.level.state.npcDoor = false;
     const pick = (...xs) => xs[Math.floor(Math.random() * xs.length)];
     const seq = [];
-    const at = [0.3, 1.5, 2.7, 3.9, 5.1];
-    const say = (who, text, anim = null) => seq.push([at[seq.length], who, text, anim]);
+    const say = (who, text, anim = null) => seq.push([0.3 + seq.length * 1.2, who, text, anim]);
     if (!late) {
       say(linda, cups >= 5 ? 'Right on time, and nobody even saw you come in. Impressive.' : pick('Right on time. Love that.', 'And there they are. Right on time.'), 'cheer');
       say(sam, lastTalker ? `You got away from ${lastTalker}? Legend.` : cups >= 4 ? 'Coffee AND on time? Who are you?' : 'See? Told them you would make it.');
-      say(linda, pick('Perfect. You can take the notes.', 'Great, let us kick off with a quick icebreaker.', 'Since you are early, you can share your screen.'), 'talk');
-      say(sam, pick('Rookie mistake, being on time.', '...we are doing icebreakers?', 'Save me some of that coffee.'));
-      if (sips === 0) say(linda, 'Are you... not going to drink that?', 'arms');
+      say(monica, pick("Great, you're here. Quick question after this?", 'Oh good. You can walk us through the Q3 numbers.'), 'talk');
+      say(karen, pick("Punctual. I'll make a note of that. A good one, for once.", 'On time. HR loves to see it.'), 'phone');
+      say(linda, pick('Perfect. You can take the notes.', "Great, let's kick off with a quick icebreaker.", "Since you're early, you can share your screen."), 'talk');
+      say(sam, sips === 0 ? 'Are you... not going to drink that?' : pick('Rookie mistake, being on time.', "...we're doing icebreakers?", 'Save me some of that coffee.'));
     } else {
       say(linda, lateBy > 20 ? 'Oh! We thought you quit.' : 'Oh good. You could join us.', 'arms');
       say(sam, lastTalker ? `Let me guess. ${lastTalker}?` : chats ? 'Let me guess. Somebody had a quick question?' : 'We started without you...');
-      say(monica || linda, monica ? 'Per my calendar invite, this started at nine.' : 'No, no. We will just go back to slide one. For you.', 'arms');
-      say(karen || linda, karen ? 'I will just make a note of that. For your file.' : 'Since you are here, you can take the minutes.', karen ? 'phone' : 'arms');
+      say(monica, 'Per my calendar invite, this started at nine.', 'arms');
+      say(karen, "I'll just make a note of that. For your file.", 'phone');
+      say(linda, "No, no. We'll just go back to slide one. For you.", 'arms');
       say(linda, 'Nice coffee, though. Did you bring enough for everyone?', 'arms');
     }
-    this.reaction = { t: 0, seq };
-    const first = seq[0][2];
-    return late ? `"${first}" Linda, VP` : `"${first}" Linda, VP`;
+    this.reaction = { t: 0, seq, end: seq[seq.length - 1][0] + 2.4 };
+    return { quote: `"${seq[0][2]}" Linda, VP`, lines: seq.map(([, who, text]) => ({ name: who.def.name, role: who.def.role, text })) };
   }
+
+  // Everyone in 2B during the finale (for framing the shot).
+  get roomPeople() { return [...this.attendees, ...this.joiners.filter((m) => m.state === 'inMeeting')]; }
 
   tickReaction(dt) {
     const r = this.reaction;
@@ -297,10 +314,11 @@ export class Stealth {
       if (item.done || r.t < item[0]) continue;
       item.done = true;
       const [, cw, text, anim] = item;
-      cw.say = text; cw.sayT = 5;
+      cw.say = text; cw.sayT = 3.6;
       cw.reactAnim = anim;
       const P = this.player.renderPos;
-      if (!cw.def.pose || cw.def.pose !== 'sit') cw.yaw = cw.prevYaw = yawTo(P.x - cw.pos.x, P.z - cw.pos.z);
+      if (cw.def.pose !== 'sit') { cw.yaw = cw.prevYaw = yawTo(P.x - cw.pos.x, P.z - cw.pos.z); cw.group.rotation.y = cw.yaw; }
+      this.onLine?.(cw.def.name, cw.def.role, text);
     }
     for (const cw of this.attendees.concat(this.joiners)) cw.sayT = Math.max(0, cw.sayT - (cw.say && cw.sayT < 90 ? dt : 0));
   }
