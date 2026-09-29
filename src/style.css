@@ -178,3 +178,10 @@ canvas#game:focus { outline: none; }
 @media (max-width: 720px) { .screen.start { place-items: center; padding-left: 20px; background: rgba(13,17,22,.9); } }
 .char-error { margin: 2px 0 0 10px; color: var(--espresso); }
 
+
+/* Start screen: who Sam is (the tips in the corner come from Sam). */
+.sam-intro { display: flex; gap: 12px; align-items: flex-start; margin: 14px 0 4px; padding: 10px 14px; max-width: 52ch; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px; }
+.sam-intro .avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--lanyard); color: white; display: grid; place-items: center; font: 600 14px var(--body); }
+.sam-intro p { margin: 0; font-size: 14px; line-height: 1.45; color: #d4dae2; }
+.sam-intro kbd { font-size: 11px; padding: 2px 5px; }
+.end-next { margin: 2px 0 0; font-size: 14px; color: var(--muted); }

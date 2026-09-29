@@ -204,6 +204,7 @@ async function boot() {
       $('end-title').textContent = r.late ? 'Late, but you made it' : 'Right on time';
       $('end-line').textContent = r.quote || (r.late ? 'Everyone saw you walk in.' : 'Nobody suspects the coffee run.');
       $('end-rating').textContent = `${r.cups} cup${r.cups > 1 ? 's' : ''} · ${r.rating}`;
+      $('end-next').textContent = r.next || '';
       const cup = (full) => `<svg class="cup${full ? ' full' : ''}" viewBox="0 0 40 40"><path class="body" d="M8 12 H28 L26 34 H10 Z"/><path class="handle" d="M28 16 C36 16 36 26 27 26"/></svg>`;
       $('end-cups').innerHTML = [1, 2, 3, 4, 5].map((i) => cup(i <= r.cups)).join('');
       $('end-breakdown').innerHTML = '';

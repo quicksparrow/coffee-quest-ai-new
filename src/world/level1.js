@@ -27,13 +27,15 @@ export function buildLevel(b, state) {
 
   // ---------- Slabs ----------
   b.box(-0.5, -0.3, -0.5, 32.5, 0, 24.5, { color: C.lobby, cast: false });
-  // Floor 2 slab, leaving the elevator shaft (x10–14, z0–4) and the stair opening (x20–23, z0–8) open.
+  // Floor 2 slab, leaving the elevator shaft (x10–14, z0–4) and the stairwell (x20–26, z0–9, less
+  // the Floor 2 landing) open.
   const slab = { color: 0xe9ecef, cast: false };
   b.box(0, 3.7, 0, 10, 4, 24, slab);
   b.box(10, 3.7, 4, 14, 4, 24, slab);
   b.box(14, 3.7, 0, 20, 4, 24, slab);
   b.box(20, 3.7, 8, 23, 4, 24, slab);
-  b.box(23, 3.7, 0, 32, 4, 24, slab);
+  b.box(23, 3.7, 9, 26, 4, 24, slab);
+  b.box(26, 3.7, 0, 32, 4, 24, slab);
 
   // ---------- Floor zones + labels (ground). Zones never overlap, so nothing flickers. ----------
   b.zone(0, 0, 10, 11, 0, C.secure);
@@ -49,7 +51,7 @@ export function buildLevel(b, state) {
   b.label('Lobby café', 21, 0, 17.9, { size: 0.62 });
   b.label('Turnstiles', 12, 0, 12.6, { size: 0.6, sub: 'badge only' });
   b.label('Elevator', 12, 0, 6.6, { size: 0.62 });
-  b.label('Stairs', 24.6, 0, 5, { size: 0.45, rot: Math.PI / 2 });
+  b.label('Stairs', 24.5, 0, 8.1, { size: 0.45 });
   b.label('Mailroom', 29, 0, 18.6, { size: 0.6, sub: 'staff only' });
   b.label('Service corridor', 29, 0, 7.5, { size: 0.62, rot: Math.PI / 2 });
   b.label('Entrance', 15, 0, 23.1, { size: 0.45 });
@@ -61,8 +63,7 @@ export function buildLevel(b, state) {
   b.zone(0, 16.5, 9, 24, F2, C.meeting);
   b.zone(26, 9, 32, 16.5, F2, C.kitchen);
   b.zone(26, 0, 32, 9, F2, C.closet);
-  b.zone(20, 8, 26, 9, F2, C.stair);
-  b.zone(23, 0, 26, 8, F2, C.stair);
+  b.zone(20, 8, 23, 9, F2, C.stair);
   b.zone(10, 4, 14, 9, F2, C.elevator);
   b.label('Open office', 5.5, F2, 14.8, { size: 0.85 });
   b.label('Kitchen', 29, F2, 15.3, { size: 0.55 });
@@ -109,13 +110,17 @@ export function buildLevel(b, state) {
   exterior('x', 24, 0, 32, [{ y0: 0, a: 13, b: 17 }]);
   exterior('z', 0, 0, 24);
   exterior('z', 32, 0, 24);
-  // Front entrance: two pairs of glass doors (closed: you're already in) in a steel frame.
-  b.box(13, 0, 23.98, 17, 2.7, 24.02, { material: winGlass, see: false, cast: false });
-  [13.04, 15, 16.96].forEach((x) => b.box(x - 0.04, 0, 23.93, x + 0.04, 2.7, 24.07, { material: frame, collide: false }));
+  // Front entrance: a pair of sliding glass doors in a steel frame. They open for people arriving
+  // for work; an invisible barrier on the threshold keeps you inside (you're already in).
+  [13.04, 16.96].forEach((x) => b.box(x - 0.04, 0, 23.93, x + 0.04, 2.7, 24.07, { material: frame, collide: false }));
   b.box(13, 2.7, 23.93, 17, 2.78, 24.07, { material: frame, collide: false });
   b.box(13, 0, 23.93, 17, 0.04, 24.07, { material: frame, collide: false });
-  [14.85, 15.15].forEach((x) => b.box(x - 0.015, 0.85, 23.84, x + 0.015, 1.65, 23.88, { material: frame, collide: false }));   // handles (inside)
-  [14.85, 15.15].forEach((x) => b.box(x - 0.015, 0.85, 24.12, x + 0.015, 1.65, 24.16, { material: frame, collide: false }));   // handles (outside)
+  b.box(13, 0, 24.1, 17, 2.7, 24.14, { visible: false });
+  const entryDoors = [[13.08, 15, -1], [15, 16.92, 1]].map(([a, bb, dir]) => new Door(b, {
+    axis: 'x', a, b: bb, fixed: 24, y0: 0.04, h: 2.66, thick: 0.04, color: 0xa9c7dc, opacity: 0.35,
+    light: false, speed: 2.2, dir, shouldOpen: () => state.entryOpen,
+  }));
+  doors.push(...entryDoors);
   // Floor 2 ceiling (the ground floor's ceiling is the underside of the Floor 2 slab).
   b.box(0, 7.0, 0, 32, 7.2, 24, { color: 0xe9ecef, collide: false, cast: false });
 
@@ -135,30 +140,41 @@ export function buildLevel(b, state) {
   });
 
   // ---------- Stairwell (full height) ----------
-  // One straight flight: bottom at the north end (z=2.2, ground) rising south to the Floor 2
-  // landing (z=8–9), which ends right at the stair exit door. The open area at the foot of the
-  // stairs is the full 6 m width of the stairwell and 2.2 m deep.
+  // A U-shaped stair: from the lobby door, flight A runs north up the east half to a landing
+  // across the north end, then flight B turns back south up the west half to the Floor 2 landing
+  // (z=8–9), right at the stair exit door. A wall runs down the middle between the flights.
+  const LAND = 1.9;                                // half-landing height
   b.vwall(20, 0, 9, 0, 7);
-  b.vwall(26, 0, 9, 0, 7, [[3, 4.6]]);          // ground: east door from the service corridor
+  b.vwall(26, 0, 9, 0, 7, [[7.2, 8.8]]);        // ground: east door from the service corridor
   b.hwall(9, 20, 26, 0, 3.7, [[23.4, 25.6]]);    // ground: front door from the lobby (no badge)
-  b.vwall(23, 2.8, 9, 0, 3.7);                   // ground: side wall between walkway and stairs
-  const z0 = 2.2, run = 8 - z0, rise = 4, len = Math.hypot(run, rise), th = Math.atan2(rise, run);
-  const normal = new THREE.Vector3(0, Math.cos(th), -Math.sin(th));
-  const mid = new THREE.Vector3(21.5, rise / 2, z0 + run / 2).addScaledVector(normal, -0.1);
-  b.world.createCollider(
-    R.ColliderDesc.cuboid(1.5, 0.1, len / 2 + 0.05)
-      .setTranslation(mid.x, mid.y, mid.z)
-      .setRotation({ x: Math.sin(-th / 2), y: 0, z: 0, w: Math.cos(-th / 2) }),
-  );
-  const steps = 13;
-  for (let i = 0; i < steps; i++) {
-    const zs = z0 + i * (run / steps);
-    b.box(20.05, 0, zs, 22.95, (i + 0.7) * (rise / steps), zs + run / steps, { color: C.stairs, collide: false });
+  b.vwall(23, 2.2, 9, 0, 7);                     // spine wall between the two flights
+  // A ramp collider under each flight (steps are just for show), ordered by increasing z.
+  const ramp = (xa, xb, za, ya, zb, yb) => {
+    const dz = zb - za, dy = yb - ya, len = Math.hypot(dz, dy), a = -Math.atan2(dy, dz);
+    const n = new THREE.Vector3(0, Math.cos(a), Math.sin(a));
+    const mid = new THREE.Vector3((xa + xb) / 2, (ya + yb) / 2, (za + zb) / 2).addScaledVector(n, -0.1);
+    b.world.createCollider(
+      R.ColliderDesc.cuboid((xb - xa) / 2, 0.1, len / 2 + 0.05)
+        .setTranslation(mid.x, mid.y, mid.z)
+        .setRotation({ x: Math.sin(a / 2), y: 0, z: 0, w: Math.cos(a / 2) }),
+    );
+  };
+  // Flight A: bottom at z=7 (a flat 2 m entry in front of it), up to the landing at z=2.2.
+  ramp(23, 26, 2.2, LAND, 7, 0);
+  const stepsA = 9, runA = 7 - 2.2;
+  for (let i = 0; i < stepsA; i++) {
+    const zs = 7 - (i + 1) * (runA / stepsA);
+    b.box(23.05, 0, zs, 25.95, (i + 0.7) * (LAND / stepsA), zs + runA / stepsA, { color: C.stairs, collide: false });
   }
-  // Floor 2: the stairwell is walled in, so the top of the flight is a proper landing rather than
-  // a balcony over an empty, unreachable strip.
-  b.vwall(23, 0, 8, F2, 3);
-  b.hwall(8, 23, 26, F2, 3);
+  // Half landing across the north end.
+  b.box(20.05, 0, 0.12, 25.95, LAND, 2.2, { color: C.stairs });
+  // Flight B: back south to Floor 2.
+  ramp(20, 23, 2.2, LAND, 8, F2);
+  const stepsB = 11, runB = 8 - 2.2;
+  for (let i = 0; i < stepsB; i++) {
+    const zs = 2.2 + i * (runB / stepsB);
+    b.box(20.05, 0, zs, 22.95, LAND + (i + 0.7) * ((F2 - LAND) / stepsB), zs + runB / stepsB, { color: C.stairs, collide: false });
+  }
 
   // ---------- Ground floor interior ----------
   const G = 3.7;
@@ -241,7 +257,7 @@ export function buildLevel(b, state) {
   // Stair exit: badge only from the stairwell side. Someone steps out every 25 s.
   const stairDoor = new Door(b, {
     axis: 'x', a: 20.6, b: 22.4, fixed: 9, y0: F2, h: 2.4, color: 0x8a6f6f,
-    shouldOpen: (p) => onF2(p) && ((p.z > 9 && Math.hypot(p.x - 21.5, p.z - 9) < 1.7) || state.smokerOpen),
+    shouldOpen: (p) => (onF2(p) && p.z > 9 && Math.hypot(p.x - 21.5, p.z - 9) < 1.7) || state.smokerOpen || state.commuterDoor,
   });
   doors.push(stairDoor);
   // Meeting 2B: opens as you walk up.
@@ -276,9 +292,10 @@ export function buildLevel(b, state) {
       callF2: new THREE.Vector3(12, F2, 5.2),
       turnstiles: new THREE.Vector3(12, 0, 11),
       elevatorLobby: new THREE.Vector3(12, 0, 5.5),
-      eastDoor: new THREE.Vector3(26.6, 0, 3.8),
+      eastDoor: new THREE.Vector3(26.6, 0, 8.0),
       stairsFront: new THREE.Vector3(24.5, 0, 9.6),
-      rampBottom: new THREE.Vector3(21.5, 0, 1.3),
+      rampBottom: new THREE.Vector3(24.5, 0, 7.4),
+      landing: new THREE.Vector3(23, LAND, 1.2),
       rampTop: new THREE.Vector3(21.5, F2, 8.5),
       stairExit: new THREE.Vector3(21.5, F2, 9.8),
       meetingDoor: new THREE.Vector3(10.4, F2, 21),
@@ -297,7 +314,7 @@ export function buildLevel(b, state) {
       inCab: (p) => elevator.contains(p),
       secure: (p) => !onF2(p) && p.z < 11 && p.x < 20,
       stairwell: (p) => p.x > 20 && p.x < 26 && p.z < 9,
-      stairWalkway: (p) => !onF2(p) && p.x > 23 && p.x < 26 && p.z < 9,
+      stairWalkway: (p) => !onF2(p) && p.x > 23 && p.x < 26 && p.z > 2.2 && p.z < 9,   // flight A and its entry
       service: (p) => !onF2(p) && p.x > 26,
       kitchen: (p) => onF2(p) && p.x > 26 && p.z > 9 && p.z < 16.5,
       meeting: (p) => onF2(p) && p.x < 8.8 && p.z > 16.7,

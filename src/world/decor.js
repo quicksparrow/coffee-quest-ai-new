@@ -323,9 +323,13 @@ function furnish(b, M) {
   shelving(b, M, 31.1, G, 3.5, -Math.PI / 2, 5, 1.6, 1.4, 7);
   { const t = P(27.7, G, 12.2, 0); t.box(1.3, 0.5, 1.1, M.box, 0, 0, 0); t.box(1.0, 0.4, 0.9, M.box, 0.05, 0.5, 0, 0.2); }
 
-  // --- Stairs: a handrail up the flight.
-  P(0, 0, 0, 0).bar(V(20.12, 0.95, 2.2), V(20.12, 4.95, 8.0), 0.025, M.metal);
-  for (let z = 2.6; z < 8; z += 1.4) P(0, 0, 0, 0).bar(V(20.12, 0.3 + ((z - 2.2) / 5.8) * 4, z), V(20.12, 0.95 + ((z - 2.2) / 5.8) * 4, z), 0.015, M.metal);
+  // --- Stairs: a handrail up each flight of the U (flight A on the east wall, B on the west).
+  const LAND = 1.9;
+  const yA = (z) => ((7 - z) / 4.8) * LAND, yB = (z) => LAND + ((z - 2.2) / 5.8) * (4 - LAND);
+  P(0, 0, 0, 0).bar(V(25.88, 0.95, 7.0), V(25.88, LAND + 0.95, 2.2), 0.025, M.metal);
+  for (let z = 6.6; z > 2.2; z -= 1.4) P(0, 0, 0, 0).bar(V(25.88, yA(z) + 0.3, z), V(25.88, yA(z) + 0.95, z), 0.015, M.metal);
+  P(0, 0, 0, 0).bar(V(20.12, LAND + 0.95, 2.2), V(20.12, 4.95, 8.0), 0.025, M.metal);
+  for (let z = 2.6; z < 8; z += 1.4) P(0, 0, 0, 0).bar(V(20.12, yB(z) + 0.3, z), V(20.12, yB(z) + 0.95, z), 0.015, M.metal);
 
   // --- Floor 2: cubicle pods.
   [[1.5, 11], [7, 11], [12.5, 11], [18, 11], [12.5, 15], [18, 15], [12.5, 19.5], [18, 19.5]].forEach(([x, z], i) => pod(b, M, x, z, i * 3));

@@ -6,14 +6,16 @@ const START_MIN = 8 * 60 + 55;
 const WARN_AT = ROUND_SECONDS - 120 / GAME_SECONDS_PER_REAL;   // 08:58
 
 const RATINGS = ['Decaf', 'Drip', 'Americano', 'Flat White', 'Silent Commuter'];
+const CUP_AT = [0, 1000, 2000, 3200, 4500];   // points for 1…5 cups (a perfect run is always 5)
+const LATE_MAX_CUPS = 3;
 const SMOKE_WAIT = 3;       // wait at the stair exit this long before someone opens it (seconds)…
 const SMOKE_OPEN = 5;       // …and it stays open this long
 const ACTION_BUFFER = 0.15; // a Space press is remembered briefly, so pressing a hair early still counts
 
 const HINTS = {
   start: "Call's at 9:00 in Meeting 2B, Floor 2. Don't show up without coffee!",
-  turnstile: "No badge again? Ask reception for a visitor pass, sneak round through the mailroom (that door is always propped open), or stick close behind Ben from Finance when he badges through.",
-  tailgate: 'Tailgated! Ben never even noticed.',
+  turnstile: "No badge again? Ask reception for a visitor pass, sneak round through the mailroom (that door is always propped open), or stick close behind someone badging through (people are still arriving for work).",
+  tailgate: 'Tailgated! They never even noticed.',
   rider: "Gary from Facilities is in the elevator. Step in and you're stuck chatting all the way up. Let the doors close and call it again, or take the stairs.",
   visitor: 'Visitor pass works on the turnstiles and the elevators. Not on the doors upstairs, though.',
   coffee: 'Nice. Press Space to sip, every sip is points and a little speed boost. Finished it? Grab another, as many as you like.',
@@ -250,8 +252,8 @@ export class Game {
       if (f === 0) return { title, sub: 'Wait, or press Space to go up', pt: P.meeting };
     }
     if (f === 0) {
-      if (Z.stairWalkway(p)) return { title, sub: 'The stairs start at the far end', pt: P.rampBottom };
-      if (Z.stairwell(p)) return { title, sub: 'Up the stairs', pt: P.rampTop };
+      if (Z.stairWalkway(p)) return { title, sub: 'Up the stairs', pt: P.landing };
+      if (Z.stairwell(p)) return { title, sub: 'Turn round and keep climbing', pt: P.rampTop };
       if (Z.service(p)) return { title, sub: 'Service corridor to the stairs', pt: P.eastDoor };
       if (Z.secure(p) || (p.z < 11 && p.x < 26)) return { title, sub: 'Elevator to Floor 2', pt: P.elevatorLobby };
       return s.hasBadge
@@ -464,8 +466,11 @@ export class Game {
     }
     // Through the propped mailroom door into the service corridor.
     if (ground && a.x <= 26 && b.x > 26 && b.z > 20.3 && b.z < 22.4) this.route('mailroom', 'Mailroom shortcut', 150);
-    // Up the stairs and in behind Rita.
-    if (f2 && a.z <= 9 && b.z > 9 && b.x > 20.5 && b.x < 22.5 && s.smokerOpen) this.route('rita', 'Slipped in behind Rita', 250);
+    // Up the stairs and in through the badge door behind Rita (or someone arriving for work).
+    if (f2 && a.z <= 9 && b.z > 9 && b.x > 20.5 && b.x < 22.5) {
+      if (s.smokerOpen) this.route('stairdoor', 'Slipped in behind Rita', 250);
+      else if (s.commuterDoor || this.level.stairDoor.open > 0.3) this.route('stairdoor', 'Tailgated the stair door', 250);
+    }
   }
 
   setXray(on) {
@@ -563,15 +568,20 @@ export class Game {
     if (late > 0) rows.push({ label: `Late by ${mmss(late)}`, pts: -Math.round(late * 40), n: 1 });
     if (this.conversations === 0) rows.push({ label: 'Never pulled into a conversation', pts: 2000, n: 1 });
     const total = Math.max(0, rows.reduce((a, r) => a + r.pts, 0));
-    let cups;
-    if (this.conversations === 0 && s.coffee.latte && s.coffee.espresso && late === 0) cups = 5;
-    else cups = total >= 4000 ? 4 : total >= 2800 ? 3 : total >= 1500 ? 2 : 1;
-    if (late > 0) cups = Math.min(cups, 2);
+    // Cups: by score, or 5 for a perfect run (both coffees, on time, never stopped for a chat).
+    const perfect = this.conversations === 0 && s.coffee.latte && s.coffee.espresso && late === 0;
+    const earned = perfect ? 5 : CUP_AT.filter((pts) => total >= pts).length;
+    const cups = late > 0 ? Math.min(earned, LATE_MAX_CUPS) : earned;
+    const fmt = (n) => n.toLocaleString('en-US');
+    let next;
+    if (cups === 5) next = 'Top rating.';
+    else if (late > 0 && cups === LATE_MAX_CUPS) next = `Late arrivals top out at ${LATE_MAX_CUPS} cups. Be there by 9:00 for more.`;
+    else next = `${cups + 1} cups at ${fmt(CUP_AT[cups])} points${late > 0 ? ` (${LATE_MAX_CUPS} max when you're late)` : ''}.`;
     if (late > 0) this.sfx.deny(); else this.sfx.win();
     // The people in 2B react (see Stealth.react); the score card follows a few seconds later.
     const scene = this.stealth?.react({ late: late > 0, lateBy: late, cups, lastTalker: this.lastTalker, chats: this.conversations });
     this.onEnd({
-      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1], quote: scene?.quote,
+      arrived: this.clockText(), late: late > 0, rows, total, cups, rating: RATINGS[cups - 1], next, quote: scene?.quote,
     });
   }
 }

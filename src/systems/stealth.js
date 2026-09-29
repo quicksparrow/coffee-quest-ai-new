@@ -88,12 +88,22 @@ const CAST = [
 // The person who steps out through the Floor 2 stair door for a smoke. Friendly: holds the door.
 const SMOKER = { id: 'rita', name: 'Rita', role: 'Smoke break', kind: 'woman', look: look('Olive', 'Medium', 'Auburn') };
 
-// Ben from Finance badges through the turnstiles every few seconds, from the entrance to the
-// elevators. Walk right behind him and the gate is still open for you (tailgating).
-const COMMUTER = { id: 'ben', name: 'Ben', role: 'Finance', kind: 'man', look: look('Charcoal', 'Fair', 'Blonde') };
-const COMMUTER_ROUTE = [[16.2, 23.4], [13, 12.5], [13, 9.6], [12.3, 5.8]];
-const COMMUTER_GATE = 13;          // centre x of the turnstile gate he uses
-const COMMUTER_WAIT = 5;           // seconds between trips
+// People arriving for work. Each one crosses the plaza, comes in the front door, badges through
+// the turnstiles, takes the stairs up (badging through the Floor 2 stair door) and sits down at
+// their desk for the day. Walk right behind them and the gate is still open for you (tailgating).
+const COMMUTERS = [
+  { id: 'ben', name: 'Ben', role: 'Finance', kind: 'man', look: look('Charcoal', 'Fair', 'Blonde'), at: 1.5, seat: [21.1, 11.24] },
+  { id: 'nina', name: 'Nina', role: 'Marketing', kind: 'woman', look: look('Burgundy', 'Brown', 'Black'), at: 19, seat: [15.6, 11.24] },
+  { id: 'omar', name: 'Omar', role: 'Legal', kind: 'man', look: look('Olive', 'Brown', 'Black'), at: 37, seat: [19.0, 11.24] },
+  { id: 'grace', name: 'Grace', role: 'Design', kind: 'woman', look: look('Plum', 'Fair', 'Auburn'), at: 55, seat: [13.5, 11.24] },
+];
+// Plaza → front door → gate → along the turnstiles → stairwell → up both flights → stair door.
+const COMMUTER_ROUTE = [
+  [17.6, 0, 29.2], [15.6, 0, 25.2], [15.1, 0, 23.2], [13, 0, 12.6], [13, 0, 10.2], [23.6, 0, 10.2], [24.5, 0, 9.2],
+  [24.5, 0, 7.1], [24.5, 1.9, 2.2], [24.5, 1.9, 1.1], [21.5, 1.9, 1.1], [21.5, 1.9, 2.2], [21.5, F2, 8.0], [21.5, F2, 8.7], [21.5, F2, 10.2],
+];
+const COMMUTER_GATE = 13;          // centre x of the turnstile gate they use
+const COMMUTER_SPEED = 1.55;
 
 // Sometimes someone is already in the elevator when it arrives. Step in and you're stuck.
 const RIDER = {
@@ -171,8 +181,12 @@ export class Stealth {
     this.nav = [new NavGrid(world, R, { y: 0, skip }), new NavGrid(world, R, { y: F2, skip })];
     this.list = CAST.map((def) => this.makeCoworker(def));
     this.smoker = this.makeSmoker();
-    this.commuter = new Coworker({ ...COMMUTER, friendly: true }, this);
-    this.commuter.scripted = true;
+    this.commuters = COMMUTERS.map((def) => {
+      const c = new Coworker({ ...def, friendly: true }, this);
+      c.scripted = true;
+      c.commuter = true;
+      return c;
+    });
     this.rider = new Coworker(RIDER, this);
     this.rider.isRider = true;
     this.attendees = ATTENDEES.map((def) => {
@@ -184,7 +198,7 @@ export class Stealth {
       return cw;
     });
     this.smoker.scripted = true;
-    this.everyone = [...this.list, this.smoker, this.commuter, this.rider, ...this.attendees];
+    this.everyone = [...this.list, this.smoker, ...this.commuters, this.rider, ...this.attendees];
     this.monica = this.list.find((c) => c.def.id === 'monica');
     this.karen = this.list.find((c) => c.def.id === 'karen');
     this.joiners = this.list.filter((c) => c.def.meetingSpot);   // they head into 2B at nine
@@ -263,10 +277,14 @@ export class Stealth {
     s.active = false;
     s.group.visible = false;
     s.say = null; s.sayT = 0;
-    const c = this.commuter;
-    c.active = false; c.group.visible = false; c.say = null; c.sayT = 0;
-    c.waitT = 3;                      // first trip a few seconds into the run
+    for (const c of this.commuters) {
+      c.active = false; c.group.visible = false; c.say = null; c.sayT = 0;
+      c.phase = 'waiting'; c.moving = false; c.beeped = false; c.fade = 0; c.seated = false;
+    }
+    this.clock = 0;
     this.level.state.gateOpen = null;
+    this.level.state.entryOpen = false;
+    this.level.state.commuterDoor = false;
     this.gateT = 0;
     const r = this.rider;
     r.active = false; r.group.visible = false; r.say = null; r.sayT = 0; r.state = 'gone'; r.used = false;
@@ -339,11 +357,13 @@ export class Stealth {
     const x = playerX < 21.5 ? 22.3 : 20.7;
     s.script = [
       new THREE.Vector3(x, F2, 8.0),
-      new THREE.Vector3(x, 0, 2.2),
-      new THREE.Vector3(x, 0, 1.1),
-      new THREE.Vector3(24.6, 0, 1.1),
-      new THREE.Vector3(24.6, 0, 3.8),
-      new THREE.Vector3(27.3, 0, 3.8),
+      new THREE.Vector3(x, 1.9, 2.2),              // down flight B to the half landing…
+      new THREE.Vector3(x, 1.9, 1.1),
+      new THREE.Vector3(24.5, 1.9, 1.1),
+      new THREE.Vector3(24.5, 1.9, 2.2),
+      new THREE.Vector3(24.5, 0, 7.1),             // …down flight A, and out the east door
+      new THREE.Vector3(24.5, 0, 8.0),
+      new THREE.Vector3(27.3, 0, 8.0),
     ];
     s.pos.set(x, F2, 10.3);
     s.prev.copy(s.pos);
@@ -368,44 +388,59 @@ export class Stealth {
     s.sayT = Math.max(0, s.sayT - dt);
   }
 
-  // ---------- Ben, badging through the turnstiles ----------
-  updateCommuter(dt) {
-    const c = this.commuter;
-    c.prev.copy(c.pos); c.prevYaw = c.yaw;
-    c.sayT = Math.max(0, c.sayT - dt);
-    if (!c.active) {
-      c.waitT -= dt;
-      if (c.waitT <= 0) {
+  // ---------- People arriving for work ----------
+  updateCommuters(dt) {
+    this.clock += dt;
+    let nearGate = false, entry = false, stairDoor = false;
+    for (const c of this.commuters) {
+      c.prev.copy(c.pos); c.prevYaw = c.yaw;
+      c.sayT = Math.max(0, c.sayT - dt);
+      if (c.phase === 'waiting') {
+        if (this.clock < c.def.at) continue;
+        c.phase = 'walking';
         c.active = true;
-        c.script = COMMUTER_ROUTE.slice(1).map(([x, z]) => new THREE.Vector3(x, 0, z));
-        c.pos.set(COMMUTER_ROUTE[0][0], 0, COMMUTER_ROUTE[0][1]);
+        c.script = COMMUTER_ROUTE.slice(1).map(([x, y, z]) => new THREE.Vector3(x, y, z));
+        // Last two legs: across the office to their desk.
+        const [sx, sz] = c.def.seat;
+        c.script.push(new THREE.Vector3(sx, F2, 10.3), new THREE.Vector3(sx, F2, sz));
+        const [x0, y0, z0] = COMMUTER_ROUTE[0];
+        c.pos.set(x0, y0, z0);
         c.prev.copy(c.pos);
-        c.yaw = c.prevYaw = 0;
+        c.yaw = c.prevYaw = Math.atan2(-(COMMUTER_ROUTE[1][0] - x0), -(COMMUTER_ROUTE[1][2] - z0));
         c.fade = 0;
         c.moving = true;
       }
-    } else {
-      c.fade = Math.min(1, c.fade + dt * 2);
-      const t = c.script[0];
-      if (!t) {
-        c.moving = false;
-        c.fade = Math.max(0, c.fade - dt * 4);            // steps into the elevator lobby and is gone
-        c.outT = (c.outT || 0) + dt;
-        if (c.outT > 0.5) { c.active = false; c.outT = 0; c.waitT = COMMUTER_WAIT; }
-      } else {
+      if (c.phase === 'walking') {
+        c.fade = Math.min(1, c.fade + dt * 1.5);
+        const t = c.script[0];
+        if (!t) {
+          // At the desk: sit down facing the monitor, and stay for the day.
+          c.phase = 'seated';
+          c.moving = false;
+          c.yaw = c.prevYaw = Math.PI;
+          c.seated = true;
+          continue;
+        }
         const d = tmpV.subVectors(t, c.pos);
         const flat = Math.hypot(d.x, d.z);
-        const step = 1.55 * dt;
+        const step = COMMUTER_SPEED * dt;
         if (flat <= step) { c.pos.copy(t); c.script.shift(); } else c.pos.addScaledVector(d, step / flat);
         if (flat > 0.01) c.yaw += angleDiff(yawTo(d.x, d.z), c.yaw) * Math.min(1, dt * 8);
+        const p = c.pos;
+        if (p.y < 2 && Math.hypot(p.x - 15, p.z - 24) < 2.4) entry = true;
+        if (p.y < 2 && Math.hypot(p.x - COMMUTER_GATE, p.z - 11) < 1.6) {
+          nearGate = true;
+          if (p.z > 11.6 && !c.beeped) { c.beeped = true; this.onBadge?.(); }
+        }
+        if (p.y > 3 && Math.hypot(p.x - 21.5, p.z - 9) < 1.7) stairDoor = true;
       }
     }
-    // His badge opens the gate as he reaches it; it stays open a moment after he's through.
-    const near = c.active && Math.hypot(c.pos.x - COMMUTER_GATE, c.pos.z - 11) < 1.6;
-    if (near) { this.gateT = 1.4; if (c.pos.z > 11.6 && !c.beeped) { c.beeped = true; this.onBadge?.(); } }
-    else this.gateT = Math.max(0, this.gateT - dt);
-    if (!c.active) c.beeped = false;
-    this.level.state.gateOpen = this.gateT > 0 ? COMMUTER_GATE : null;
+    // Their badge opens the gate as they reach it; it stays open a moment after they're through.
+    if (nearGate) this.gateT = 1.4; else this.gateT = Math.max(0, this.gateT - dt);
+    const st = this.level.state;
+    st.gateOpen = this.gateT > 0 ? COMMUTER_GATE : null;
+    st.entryOpen = entry;
+    st.commuterDoor = stairDoor;
   }
 
   // ---------- Gary, already in the elevator ----------
@@ -466,7 +501,7 @@ export class Stealth {
   update(dt, P, events) {
     this.grace = Math.max(0, this.grace - dt);
     this.updateSmoker(dt);
-    this.updateCommuter(dt);
+    this.updateCommuters(dt);
     this.updateRider(dt, P, events);
     if (this.conversation) this.updateConversation(dt, events);
     for (const m of this.joiners) {
@@ -730,7 +765,7 @@ export class Stealth {
       const playing = live && (!this.reaction || cw.attendee || cw.state === 'inMeeting');
       if (cw.attendee) { cw.group.position.copy(cw.pos); cw.group.rotation.y = cw.yaw; }
       if ((cw.scripted || cw.isRider) && !cw.active) { cw.tag.visible = cw.bubble.visible = cw.meter.visible = false; cw.group.visible = false; continue; }
-      if (cw === this.commuter) cw.char.setFade?.(cw.fade);
+      if (cw.commuter) cw.char.setFade?.(cw.fade);
       const floor = cw.group.position.y > 2 ? 1 : 0;
       const same = floor === playerFloor;
       const d = Math.hypot(playerPos.x - cw.group.position.x, playerPos.z - cw.group.position.z);
@@ -740,13 +775,13 @@ export class Stealth {
       else if (cw.attendee) key = cw.def.pose;
       else if (cw.state === 'inMeeting') key = 'arms';
       else if (cw.state === 'talk') key = 'talk';
-      else if (cw.scripted) key = cw.moving ? 'walk' : 'idle';
+      else if (cw.scripted) key = cw.seated ? 'sit' : cw.moving ? 'walk' : 'idle';
       else if (cw.moving) key = cw.state === 'chase' ? 'jog' : 'walk';
       else if (cw.state === 'wait') key = cw.stops[cw.stop].pose || 'idle';
       else if (cw.state === 'notice') key = 'idle';
       cw.char.play(key, 0.25);
       const clip = CLIP_SPEED[key];
-      const spd = cw === this.smoker ? 1.35 : cw === this.commuter ? 1.55 : cw.speed || cw.def.speed;
+      const spd = cw === this.smoker ? 1.35 : cw.commuter ? COMMUTER_SPEED : cw.speed || cw.def.speed;
       if (cw.char.current) cw.char.current.timeScale = clip ? THREE.MathUtils.clamp(spd / clip, 0.6, 1.6) : 1;
       // People on the other floor are behind a concrete slab: skip drawing and animating them.
       cw.group.visible = same && (!(cw.scripted || cw.isRider) || cw.active);
@@ -822,7 +857,7 @@ export class Stealth {
   warmup(on) {
     for (const cw of this.list) { cw.cone.visible = on; cw.pathLine.visible = on; cw.meter.visible = on; cw.bubble.visible = on; cw.group.visible = true; }
     this.smoker.group.visible = on;
-    this.commuter.group.visible = on;
+    for (const c of this.commuters) c.group.visible = on;
     this.rider.group.visible = on;
   }
 }

@@ -196,7 +196,8 @@ export const CLIP_SPEED = { walk: 1.25, jog: 4.2, hurry: 6.5, crouchWalk: 0.8 };
 // Sip timing (seconds) and where the lips are relative to the Head bone (metres, per body).
 const SIP = { up: 0.38, hold: 0.62, down: 0.42, woman: { mouthUp: 0.06, mouthFwd: 0.1 }, man: { mouthUp: 0.06, mouthFwd: 0.11 } };
 export const SIP_SECONDS = SIP.up + SIP.hold + SIP.down;
-const SIP_BONES = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_.*l$|^(neck_01|Head)$/;
+// (Not the neck or head: the clip turns the head to the left, toward a cup held at the side.)
+const SIP_BONES = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_.*l$/;
 
 export class Character {
   constructor(assets, kind) {
@@ -302,7 +303,7 @@ export class Character {
     const ease = (x) => x * x * (3 - 2 * x);
     const lift = !sipping ? 0 : t < SIP.up ? ease(t / SIP.up) : t < SIP.up + SIP.hold ? 1 : ease(1 - (t - SIP.up - SIP.hold) / SIP.down);
     const drink = !sipping || t < SIP.up ? 0 : Math.min(1, (t - SIP.up) / SIP.hold);
-    // Grip (fingers) always; the head tips a little while drinking.
+    // Grip (fingers) always.
     this.applySipPose(0.3 + 0.2 * lift, lift);
     const { v, q, m } = this.ik;
     this.root.updateMatrixWorld(true);
@@ -311,6 +312,15 @@ export class Character {
     fwd.set(0, 0, 1).applyQuaternion(q[0]);
     up.set(0, 1, 0).applyQuaternion(q[0]);
     left.set(1, 0, 0).applyQuaternion(q[0]);
+    // The head stays facing forward and tips back a little as you drink (chin up).
+    if (drink > 0) {
+      const h = this.head;
+      h.getWorldQuaternion(q[1]);
+      q[2].setFromAxisAngle(left, -0.1 * drink * lift);
+      h.parent.getWorldQuaternion(q[3]);
+      h.quaternion.copy(q[3].invert()).multiply(q[2]).multiply(q[1]);
+      h.updateMatrixWorld(true);
+    }
     // Carry: in front of the left hip, cup upright, hand on the outside of the cup.
     this.bones.pelvis.getWorldPosition(carry).addScaledVector(up, 0.14).addScaledVector(fwd, 0.3).addScaledVector(left, 0.17);
     // Sip: lid at the lips, tipped back as you drink.

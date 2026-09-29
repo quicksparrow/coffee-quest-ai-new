@@ -9,10 +9,11 @@ const GREEN = new THREE.Color(0x4cc38a);
  * `shouldOpen(player)` decides every frame whether it wants to be open.
  */
 export class Door {
-  constructor(builder, { axis, a, b, fixed, y0, h = 2.4, thick = 0.12, color = 0x7e8a99, opacity = 1, light = true, lightY = null, shouldOpen, speed = 3 }) {
+  constructor(builder, { axis, a, b, fixed, y0, h = 2.4, thick = 0.12, color = 0x7e8a99, opacity = 1, light = true, lightY = null, shouldOpen, speed = 3, dir = 1 }) {
     this.axis = axis; this.a = a; this.b = b; this.fixed = fixed; this.y0 = y0; this.h = h;
     this.shouldOpen = shouldOpen;
     this.speed = speed;
+    this.dir = dir;               // which way the panel slides (+1 or -1 along its axis)
     this.open = 0;
     this.width = b - a;
     const R = builder.R;
@@ -52,7 +53,7 @@ export class Door {
     const want = this.shouldOpen(playerPos) || (this.open > 0.05 && this.inDoorway(playerPos));
     const target = want ? 1 : 0;
     this.open += Math.sign(target - this.open) * Math.min(Math.abs(target - this.open), dt * this.speed);
-    const slide = this.open * this.width * 0.92;
+    const slide = this.open * this.width * 0.92 * this.dir;
     this.panel.position.copy(this.base);
     if (this.axis === 'x') this.panel.position.x += slide; else this.panel.position.z += slide;
     // Collider off as soon as the door starts opening; back on only once fully shut.
