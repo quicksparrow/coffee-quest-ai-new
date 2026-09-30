@@ -247,5 +247,3 @@ h1 em { font-style: normal; color: var(--espresso); }
 @keyframes blink { 50% { opacity: 0; } }
 @media (max-height: 700px) { .brand-cup { width: 44px; height: 58px; } .clock-chip { padding: 4px 10px; font-size: 12px; } }
 
-/* A warmer, punchier grade on the start screen's living lobby. */
-canvas#game.showcase { filter: saturate(1.15) contrast(1.06) brightness(.97); }

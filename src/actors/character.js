@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /*
   Player characters: Quaternius "Universal Base Characters" (CC0) on the Universal Animation
@@ -209,6 +210,68 @@ const V3 = () => new THREE.Vector3();
 const IKV = { x: V3(), y: V3(), scale: V3(), pole: V3(), pole2: V3(), defPole: V3(), a: V3(), b: V3(), c: V3(), toT: V3(), elbow: V3(), wristAt: V3(), cur: V3(), want: V3() };
 const IKQ = { rq: new THREE.Quaternion(), delta: new THREE.Quaternion(), world: new THREE.Quaternion(), parent: new THREE.Quaternion() };
 
+// ---------- Shoes ----------
+const SHOE_COLOR = { man: 0x3a271c, woman: 0x1c1b22 };   // brown oxfords / black flats
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// Built once per body model (clones share the geometry) in the body's bind space: Y up, toes +Z.
+function shoeGeometry(body) {
+  const g = body.geometry;
+  if (g.userData.shoes !== undefined) return g.userData.shoes;
+  const bones = body.skeleton.bones.map((b) => b.name);
+  const pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const parts = [];
+  for (const side of ['l', 'r']) {
+    const foot = bones.indexOf(`foot_${side}`), ball = bones.indexOf(`ball_${side}`);
+    if (foot < 0 || ball < 0) { g.userData.shoes = null; return null; }
+    // The foot: every vertex mostly moved by the foot or ball bone.
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      let w = 0;
+      for (let k = 0; k < 4; k++) { const j = si.getComponent(i, k); if (j === foot || j === ball) w += sw.getComponent(i, k); }
+      if (w > 0.5) box.expandByPoint(v.fromBufferAttribute(pos, i));
+    }
+    if (box.isEmpty()) { g.userData.shoes = null; return null; }
+    const cx = (box.min.x + box.max.x) / 2;
+    const W = (box.max.x - box.min.x) * 1.22;
+    const z0 = box.min.z - 0.012, L = (box.max.z - box.min.z) + 0.022;
+    const y0 = Math.min(box.min.y, 0) - 0.004, H = Math.min(box.max.y, 0.1) - y0 + 0.01;
+    const shape = new THREE.BoxGeometry(1, 1, 1, 6, 4, 14);
+    const p = shape.attributes.position;
+    const n = p.count;
+    const colors = new Float32Array(n * 3), idx = new Uint16Array(n * 4), wts = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      const x = p.getX(i), y = p.getY(i) + 0.5, z = p.getZ(i) + 0.5;   // y, z in 0..1 (z: heel → toe)
+      // In plan: a rounded heel, full width across the ball, a round toe cap (not a point).
+      const heel = Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, 0.18 - z) / 0.18, 2)));
+      const toe = Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, z - 0.68) / 0.32, 2)));
+      const wx = (0.86 + 0.14 * smooth(0, 0.4, z)) * Math.max(0.45, Math.min(heel, toe) * 0.95 + 0.05);
+      // In profile: the collar at the back, sloping down over the instep to a low toe box, and
+      // a domed top across the width.
+      const nose = Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, z - 0.74) / 0.26, 2)));   // toe box rounds over the front
+      const hy = (1 - 0.4 * smooth(0.35, 0.8, z)) * (0.6 + 0.4 * Math.sqrt(Math.max(0, 1 - 4 * x * x))) * Math.max(0.42, nose);
+      p.setXYZ(i, cx + x * W * wx, y0 + y * H * (y > 0.02 ? hy : 1), z0 + z * L);
+      // Darker sole and heel edge.
+      const sole = y < 0.16 ? 0.45 : 1;
+      colors.set([sole, sole, sole], i * 3);
+      const b = smooth(0.58, 0.78, z);
+      idx.set([foot, ball, 0, 0], i * 4);
+      wts.set([1 - b, b, 0, 0], i * 4);
+    }
+    shape.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    shape.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    shape.setAttribute('skinWeight', new THREE.BufferAttribute(wts, 4));
+    shape.deleteAttribute('normal'); shape.deleteAttribute('uv');
+    const smoothShape = mergeVertices(shape);           // one vertex per corner: smooth shading
+    smoothShape.computeVertexNormals();
+    parts.push(smoothShape);
+  }
+  const merged = mergeGeometries(parts);
+  g.userData.shoes = merged;
+  return merged;
+}
+
 export class Character {
   constructor(assets, kind) {
     this.kind = kind;
@@ -242,6 +305,8 @@ export class Character {
     this.actions.interact = once('Interact');
     this.actions.cheer.setLoop(THREE.LoopOnce, 1);
     this.actions.cheer.clampWhenFinished = true;
+    // Real shoes: the base bodies are barefoot (the old painted-on shoes still showed toes).
+    if (this.body?.isSkinnedMesh) this.addShoes(kind);
     // Every material stays in the transparent pass so the camera fade never recompiles a shader.
     // Each character gets its own copy of every material (the fade is per character; sharing
     // the eyes' material made everyone's eyes fade with whoever was near a wall).
@@ -257,6 +322,25 @@ export class Character {
     this.play('idle', 0);
     this.setSkin(1);
     this.setHair(1);
+  }
+
+  // A pair of shoes skinned to the same skeleton as the body: the heel follows the foot bone
+  // and the toe box bends with the ball of the foot, so they walk, crouch and tiptoe with it.
+  // The shape is fitted to each body's feet (measured from the mesh), a little bigger all round
+  // so no toes poke through.
+  addShoes(kind) {
+    const body = this.body;
+    const geo = shoeGeometry(body);
+    if (!geo) return;
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.05, color: SHOE_COLOR[kind] });
+    const shoes = new THREE.SkinnedMesh(geo, mat);
+    shoes.name = 'Shoes';
+    shoes.position.copy(body.position); shoes.quaternion.copy(body.quaternion); shoes.scale.copy(body.scale);
+    shoes.frustumCulled = false;
+    shoes.castShadow = true; shoes.receiveShadow = true;
+    body.parent.add(shoes);
+    shoes.bind(body.skeleton, body.bindMatrix);
+    this.shoes = shoes;
   }
 
   setLook(l) { this.setOutfit(l.outfit); this.setSkin(l.skin); this.setHair(l.hair); }

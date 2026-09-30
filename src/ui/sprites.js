@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERLAY } from '../core/post.js';
 
 /*
   Small screen-facing labels drawn on canvases: name tags, the suspicion meter over a
@@ -17,6 +18,7 @@ function spriteFrom(canvas, sx, sy, { depthTest = true, order = 5 } = {}) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, depthTest, sizeAttenuation: false, toneMapped: false }));
   s.scale.set(sx, sy, 1);
   s.renderOrder = order;
+  s.layers.set(OVERLAY);                // drawn after the film grade, crisp and true to colour
   s.userData.canvas = canvas;
   return s;
 }

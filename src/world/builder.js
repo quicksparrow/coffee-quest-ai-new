@@ -80,15 +80,15 @@ export class Builder {
   }
 
   // A material from a surface name ('carpet', 'wood', ...) or a palette colour.
-  surface(name, color = 0xffffff, { xray = false, opacity = 1, roughness, emissive } = {}) {
-    const key = `S-${name}-${color}-${xray}-${opacity}-${roughness}-${emissive}`;
+  surface(name, color = 0xffffff, { xray = false, opacity = 1, roughness, emissive, emissiveIntensity = 1 } = {}) {
+    const key = `S-${name}-${color}-${xray}-${opacity}-${roughness}-${emissive}-${emissiveIntensity}`;
     if (!this.mats.has(key)) {
       const S = SURFACES[name];
       const m = new THREE.MeshStandardMaterial({
         color, roughness: roughness ?? S.roughness, metalness: S.metalness || 0, map: S.map ? S.map() : null,
       });
       if (S.env != null) m.envMapIntensity = S.env;
-      if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveIntensity = 1; }
+      if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveIntensity = emissiveIntensity; }
       m.userData.tile = S.map ? S.tile : 0;
       if (opacity < 1 || xray) { m.transparent = true; m.opacity = opacity; m.depthWrite = opacity >= 1; }
       m.userData.baseOpacity = opacity;

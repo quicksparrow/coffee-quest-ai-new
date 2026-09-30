@@ -34,7 +34,7 @@ export function decorate(b) {
 function materials(b) {
   const basic = (map, opts = {}) => new THREE.MeshBasicMaterial({ map, toneMapped: false, ...opts });
   return {
-    panel: b.surface('paint', 0xffffff, { emissive: 0xfff8ee }),
+    panel: b.surface('paint', 0xffffff, { emissive: 0xfff8ee, emissiveIntensity: 3.6 }),
     metal: b.surface('metal', 0xb9c0c8),
     darkMetal: b.surface('metal', 0x3d434b),
     black: b.surface('paint', 0x23262b, { roughness: 0.45 }),
@@ -66,7 +66,7 @@ function materials(b) {
     bark: b.surface('paint', 0x5b4636, { roughness: 1 }),
     foliage: new THREE.MeshStandardMaterial({ color: 0x5f8f4e, roughness: 0.9, flatShading: true }),
     foliage2: new THREE.MeshStandardMaterial({ color: 0x77a35a, roughness: 0.9, flatShading: true }),
-    lamp: b.surface('paint', 0xffffff, { emissive: 0xfff1d6 }),
+    lamp: b.surface('paint', 0xffffff, { emissive: 0xfff1d6, emissiveIntensity: 3.2 }),
     flag: [0xd6a27c, 0x2f4858, 0x86a8c4].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, side: THREE.DoubleSide })),
     rug: Object.assign(new THREE.MeshStandardMaterial({ map: TX.fabric(), color: 0x7e8e76, roughness: 1 }), { userData: { tile: 0.5 } }),
   };
