@@ -225,7 +225,9 @@ export class Stealth {
     const idx = [];
     for (let i = 0; i < N; i++) idx.push(0, i + 1, i + 2);
     g.setIndex(idx);
-    cw.coneMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.34, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    // Depth-tested, so people standing in a cone hide it rather than getting painted over (in
+    // X-ray the walls stop writing depth, so cones still show through them).
+    cw.coneMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.34, depthWrite: false, side: THREE.DoubleSide });
     cw.cone = new THREE.Mesh(g, cw.coneMat);
     cw.cone.frustumCulled = false;
     cw.cone.renderOrder = 6;
@@ -234,7 +236,7 @@ export class Stealth {
     cw.stops.forEach((s, i) => { pts.push(s.p.clone()); cw.legs[i].forEach((q) => pts.push(q.clone())); });
     pts.forEach((q) => { q.y += 0.06; });
     const lg = new THREE.BufferGeometry().setFromPoints(pts);
-    cw.pathLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.55, depthTest: false }));
+    cw.pathLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.55, depthWrite: false }));
     cw.pathLine.computeLineDistances();
     cw.pathLine.renderOrder = 6;
     cw.pathLine.visible = false;
@@ -834,14 +836,14 @@ export class Stealth {
         cw.bubble.center.set(0.5, -below / cw.bubble.scale.y);
         cw.bubble.material.opacity = 1;
       }
-      if (cw.cone) this.drawCone(cw, same && (this.xray || showcase) && playing);
+      if (cw.cone) this.drawCone(cw, same && (this.xray || showcase) && playing, this.xray);   // (no route lines on the title screen)
     }
   }
 
   // X-ray: the part of the floor each coworker can see, clipped by walls.
-  drawCone(cw, show) {
+  drawCone(cw, show, route = show) {
     cw.cone.visible = show;
-    cw.pathLine.visible = show;
+    cw.pathLine.visible = show && route;
     if (!show) return;
     const pos = cw.cone.geometry.attributes.position;
     const a = pos.array;
@@ -867,6 +869,9 @@ export class Stealth {
 
   setXray(on) {
     this.xray = on;
+    // In X-ray the cones and routes show through everything (desks, partitions); otherwise
+    // they sit on the floor and people standing in them hide them.
+    for (const cw of this.list) { if (cw.coneMat) cw.coneMat.depthTest = !on; if (cw.pathLine) cw.pathLine.material.depthTest = !on; }
     for (const cw of this.everyone) {
       for (const m of cw.char.glowMats || []) {
         m.emissive.setHex(on ? (cw.def.friendly ? 0x2a5aa0 : 0xc2412a) : 0x000000);
