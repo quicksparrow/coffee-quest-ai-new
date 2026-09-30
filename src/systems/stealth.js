@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { FLOOR_FX } from '../core/post.js';
 import { Character, CLIP_SPEED, look } from '../actors/character.js';
 import { NavGrid } from './nav.js';
 import { nameTag, meter, drawMeter, bubble, drawBubble } from '../ui/sprites.js';
@@ -232,7 +231,6 @@ export class Stealth {
     cw.cone = new THREE.Mesh(g, cw.coneMat);
     cw.cone.frustumCulled = false;
     cw.cone.renderOrder = 6;
-    cw.cone.layers.set(FLOOR_FX);         // not part of the ambient-occlusion pass
     cw.cone.visible = false;
     const pts = [];
     cw.stops.forEach((s, i) => { pts.push(s.p.clone()); cw.legs[i].forEach((q) => pts.push(q.clone())); });
@@ -241,7 +239,6 @@ export class Stealth {
     cw.pathLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.55, depthWrite: false }));
     cw.pathLine.computeLineDistances();
     cw.pathLine.renderOrder = 6;
-    cw.pathLine.layers.set(FLOOR_FX);
     cw.pathLine.visible = false;
     this.scene.add(cw.cone, cw.pathLine);
     return cw;

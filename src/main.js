@@ -14,7 +14,6 @@ import { backdrop } from './world/decor.js';
 import { nameTag } from './ui/sprites.js';
 import { Stealth, RAY_GROUPS } from './systems/stealth.js';
 import { Beacons } from './systems/beacons.js';
-import { Post } from './core/post.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -103,30 +102,17 @@ async function boot() {
   // A 0.1 m near plane keeps depth precision high enough that floors and decals never flicker.
   const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 90);
 
-  // Cinematic post-processing (ambient occlusion, bloom, film grade). The level is remembered per
-  // browser: 2 high, 1 medium (no ambient occlusion), 0 low (grade only).
-  const post = new Post(renderer, scene, camera);
-  const FX_KEY = 'coffee-quest-fx';
-  const FX_NAMES = ['Low', 'Medium', 'High'];
-  try { const saved = localStorage.getItem(FX_KEY); if (saved !== null) post.setLevel(Number(saved)); } catch { /* private mode */ }
-  const setFx = (level, remember = true) => {
-    post.setLevel(level);
-    $('fx-state').textContent = FX_NAMES[post.level];
-    if (remember) { try { localStorage.setItem(FX_KEY, String(post.level)); } catch { /* ignore */ } }
-  };
-  setFx(post.level, false);
-
   // Soft image-based light from a generic room (built in code, nothing to download): gives
   // the stone floor, glass and metal their reflections and fills the shadows.
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.42;             // less flat fill: more contrast, more mood
+  scene.environmentIntensity = 0.55;
   pmrem.dispose();
-  scene.add(new THREE.HemisphereLight(0xe3ebf6, 0x8a7d70, 0.62));   // cool sky, warm bounce
+  scene.add(new THREE.HemisphereLight(0xf6f4ef, 0x8f8a82, 0.85));
   backdrop(scene);
   // "Sun through the windows": one shadow light that follows the player and sits just under
   // the ceiling of their floor, so the floor above never shades the one below.
-  const sun = new THREE.DirectionalLight(0xffe2bf, 2.55);        // low, warm morning sun
+  const sun = new THREE.DirectionalLight(0xfff4e6, 1.9);
   sun.castShadow = true;
   const SHADOW_HALF = 13;
   sun.shadow.mapSize.set(1024, 1024);
@@ -369,7 +355,6 @@ async function boot() {
       if (e.code === 'KeyH') { game.hintsOn = !game.hintsOn; $('hints-state').textContent = game.hintsOn ? 'On' : 'Off'; }
       if (e.code === 'KeyM') { sfx.enabled = !sfx.enabled; $('sound-state').textContent = sfx.enabled ? 'On' : 'Off'; }
       if (e.code === 'KeyN') { sfx.musicOn = !sfx.musicOn; $('music-state').textContent = sfx.musicOn ? 'On' : 'Off'; }
-      if (e.code === 'KeyV') { setFx((post.level + 2) % 3); dirty = true; }   // High → Medium → Low → High
     }
   });
   window.addEventListener('blur', pause);
@@ -378,7 +363,6 @@ async function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
-    post.setSize(window.innerWidth, window.innerHeight, renderer.getPixelRatio());
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     dirty = true;
@@ -410,7 +394,6 @@ async function boot() {
   setProgress(0.95, 'Almost there…');
   await breathe();
   renderer.render(scene, camera);             // also builds the shadow-map shaders
-  post.draw(0);                               // …and the post-processing ones
   if (spare) { scene.remove(spare.root); spare.root.position.set(0, 0, 0); }
   stealth?.warmup(false);
   beacons.warmup(false);
@@ -451,8 +434,7 @@ async function boot() {
       placeSun(player.floor, player.renderPos.x, player.renderPos.z);
       if (mode === 'playing') { game.updateHud(dt); sounds(dt); }
       mirrorCheck();
-      post.xray = game.xrayOn;
-      post.draw(dt);
+      renderer.render(scene, camera);
       if (canvas.style.visibility === 'hidden') canvas.style.visibility = '';
       adaptQuality(raw);
     } else if ((mode === 'start' && !noticeOnly) || mode === 'end') {
@@ -460,12 +442,12 @@ async function boot() {
       if (mode === 'start' && ready) attract(dt);
       animateCharacters(dt);
       if (mode === 'start') selectCam(); else endCam(dt);
-      post.draw(dt);
+      renderer.render(scene, camera);
       if (canvas.style.visibility === 'hidden') { canvas.style.visibility = ''; canvas.classList.add('fade-in'); }
       canvas.classList.toggle('showcase', mode === 'start');
     } else if (dirty && !noticeOnly) {
       camCtl.update(dt, player);
-      post.draw(0);
+      renderer.render(scene, camera);
       dirty = false;
     }
   }
@@ -562,13 +544,6 @@ async function boot() {
     const avg = quality.acc / quality.frames;
     quality.acc = 0; quality.frames = 0;
     let next = quality.ratio;
-    // Too slow: first give up the most expensive effects (remembered for next time), then
-    // lower the resolution.
-    if (avg > 1 / 45 && post.level > 0 && quality.calm === 0) {
-      setFx(post.level - 1);
-      quality.calm = 3;
-      return;
-    }
     if (avg > 1 / 45 && quality.ratio > quality.min) {
       quality.max = Math.max(quality.min, quality.ratio - 0.05);   // this scale was too heavy
       next = Math.max(quality.min, quality.ratio - 0.2);
@@ -581,7 +556,6 @@ async function boot() {
       quality.ratio = next;
       renderer.setPixelRatio(next);
       renderer.setSize(window.innerWidth, window.innerHeight);
-      post.setSize(window.innerWidth, window.innerHeight, next);
     }
   }
 
@@ -590,7 +564,7 @@ async function boot() {
   if (DEBUG) {
     // Handle for automated playtests and performance checks (?debug in the URL).
     window.__coffeeQuest = {
-      game, player, state, level, renderer, scene, quality, stealth, camera, input, world, sfx, post,
+      game, player, state, level, renderer, scene, quality, stealth, camera, input, world, sfx,
       // Run the simulation n fixed steps at once (automated playtests).
       step(n) {
         for (let i = 0; i < n && mode === 'playing'; i++) { game.update(STEP); world.step(); player.capture(); input.endFrame(); }

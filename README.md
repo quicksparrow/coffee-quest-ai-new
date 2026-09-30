@@ -87,11 +87,7 @@ src/systems/            follow camera, coworkers and stealth, walkable grid and 
 src/ui/                 HUD updates, name tags, speech bubbles and meters
 ```
 
-## Cinematic look
-
-The picture goes through a post-processing chain (`src/core/post.js`): ambient occlusion (soft contact shadows where things meet: feet on the floor, desks, corners), bloom on the ceiling light panels and lamps, and a film grade (warm highlights, cool shadows, a gentle contrast curve, vignette, fine grain and a hint of lens fringing at the edges). The lighting is a warm, low morning sun with a cooler sky fill. Name tags, speech bubbles and X-ray labels are drawn after the grade so they stay crisp. In the pause menu, V switches Visual effects between High (everything), Medium (no ambient occlusion) and Low (grade only); if the frame rate sags the game steps down on its own and remembers it for next time.
-
-Both characters wear real shoes: a pair fitted to each body's feet and skinned to the foot and toe bones, so they bend as you walk and no bare toes show.
+Both characters wear real shoes: a slim pair fitted to each body's feet and skinned to the foot and toe bones, so they bend as you walk and no bare toes show.
 
 ## Performance notes
 

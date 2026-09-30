@@ -234,9 +234,9 @@ function shoeGeometry(body) {
     }
     if (box.isEmpty()) { g.userData.shoes = null; return null; }
     const cx = (box.min.x + box.max.x) / 2;
-    const W = (box.max.x - box.min.x) * 1.22;
-    const z0 = box.min.z - 0.012, L = (box.max.z - box.min.z) + 0.022;
-    const y0 = Math.min(box.min.y, 0) - 0.004, H = Math.min(box.max.y, 0.1) - y0 + 0.01;
+    const W = (box.max.x - box.min.x) * 1.07;
+    const z0 = box.min.z - 0.007, L = (box.max.z - box.min.z) + 0.012;
+    const y0 = Math.min(box.min.y, 0) - 0.003, H = Math.min(box.max.y, 0.085) - y0 + 0.006;
     const shape = new THREE.BoxGeometry(1, 1, 1, 6, 4, 14);
     const p = shape.attributes.position;
     const n = p.count;
@@ -326,8 +326,8 @@ export class Character {
 
   // A pair of shoes skinned to the same skeleton as the body: the heel follows the foot bone
   // and the toe box bends with the ball of the foot, so they walk, crouch and tiptoe with it.
-  // The shape is fitted to each body's feet (measured from the mesh), a little bigger all round
-  // so no toes poke through.
+  // The shape is fitted to each body's feet (measured from the mesh), just big enough that no
+  // toes poke through: slim, not clunky.
   addShoes(kind) {
     const body = this.body;
     const geo = shoeGeometry(body);
